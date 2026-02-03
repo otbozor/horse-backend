@@ -1,41 +1,85 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { v4 as uuidv4 } from 'uuid';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class MediaService {
+    private uploadsDir = path.join(process.cwd(), 'uploads');
+    private apiUrl: string;
+
     constructor(
         private prisma: PrismaService,
         private configService: ConfigService,
-    ) { }
+    ) {
+        // Get API URL from environment or use default
+        this.apiUrl = this.configService.get<string>('API_URL') || 'http://localhost:5000';
+        
+        // Ensure uploads directory exists
+        if (!fs.existsSync(this.uploadsDir)) {
+            fs.mkdirSync(this.uploadsDir, { recursive: true });
+        }
+    }
 
-    // Generate signed URL for S3 upload (placeholder - implement with actual S3 SDK)
-    async getSignedUploadUrl(
-        entityType: 'listing' | 'product' | 'blog',
-        contentType: string,
-    ): Promise<{ uploadUrl: string; fileUrl: string; key: string }> {
-        const bucket = this.configService.get<string>('S3_BUCKET');
-        const endpoint = this.configService.get<string>('S3_ENDPOINT');
+    // Generate file path for upload
+    async getUploadPath(
+        entityType: 'listings' | 'blog' | 'events' | 'avatars',
+        file: Express.Multer.File,
+    ): Promise<{ filePath: string; fileUrl: string; fileName: string }> {
+        // Validate file type
+        const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/webm'];
+        if (!allowedMimes.includes(file.mimetype)) {
+            throw new BadRequestException('Invalid file type. Only JPEG, PNG, WebP, MP4, WebM allowed');
+        }
 
-        const key = `${entityType}/${uuidv4()}`;
-        const extension = contentType.split('/')[1] || 'jpg';
-        const fullKey = `${key}.${extension}`;
+        // Validate file size (max 50MB)
+        const maxSize = 50 * 1024 * 1024;
+        if (file.size > maxSize) {
+            throw new BadRequestException('File too large. Max 50MB');
+        }
 
-        // In production, use @aws-sdk/client-s3 to generate presigned URL
-        // For now, return placeholder
-        const fileUrl = `${endpoint}/${bucket}/${fullKey}`;
+        const fileName = `${uuidv4()}-${Date.now()}${path.extname(file.originalname)}`;
+        const entityDir = path.join(this.uploadsDir, entityType);
+        
+        // Create entity directory if not exists
+        if (!fs.existsSync(entityDir)) {
+            fs.mkdirSync(entityDir, { recursive: true });
+        }
 
-        return {
-            uploadUrl: `${endpoint}/${bucket}/${fullKey}?upload=true`, // Placeholder
-            fileUrl,
-            key: fullKey,
-        };
+        const filePath = path.join(entityDir, fileName);
+        const relativePath = `/uploads/${entityType}/${fileName}`;
+        const fileUrl = `${this.apiUrl}${relativePath}`;
+
+        return { filePath, fileUrl, fileName };
+    }
+
+    // Save file to disk
+    async saveFile(file: Express.Multer.File, filePath: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            fs.writeFile(filePath, file.buffer, (err) => {
+                if (err) reject(err);
+                else resolve();
+            });
+        });
+    }
+
+    // Delete file from disk
+    async deleteFile(fileUrl: string): Promise<void> {
+        try {
+            const filePath = path.join(process.cwd(), 'public', fileUrl);
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+            }
+        } catch (error) {
+            console.error('Error deleting file:', error);
+        }
     }
 
     async attachMediaToListing(
         listingId: string,
-        media: Array<{ url: string; type: 'IMAGE' | 'VIDEO'; sortOrder: number; hash?: string }>,
+        media: Array<{ url: string; type: 'IMAGE' | 'VIDEO'; sortOrder: number }>,
     ) {
         // Delete existing media first
         await this.prisma.horseMedia.deleteMany({
@@ -49,7 +93,6 @@ export class MediaService {
                 url: m.url,
                 type: m.type,
                 sortOrder: m.sortOrder ?? index,
-                hash: m.hash,
             })),
         });
     }

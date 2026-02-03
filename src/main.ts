@@ -4,18 +4,28 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import * as cookieParser from 'cookie-parser';
 import helmet from 'helmet';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import * as path from 'path';
 
 async function bootstrap() {
-    const app = await NestFactory.create(AppModule);
+    const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
     // Security
-    app.use(helmet());
+    app.use(helmet({
+        crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }));
     app.use(cookieParser());
 
     // CORS
     app.enableCors({
         origin: process.env.APP_URL || 'http://localhost:3000',
         credentials: true,
+    });
+
+    // Serve static files (uploads)
+    const uploadsPath = path.join(process.cwd(), 'uploads');
+    app.useStaticAssets(uploadsPath, {
+        prefix: '/uploads',
     });
 
     // Validation
@@ -50,6 +60,7 @@ async function bootstrap() {
     await app.listen(port);
     console.log(`Otbozor API running on http://localhost:${port}`);
     console.log(`Swagger docs: http://localhost:${port}/api/docs`);
+    console.log(`Uploads: http://localhost:${port}/uploads`);
 }
 
 bootstrap();
