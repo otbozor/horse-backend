@@ -16,25 +16,31 @@ async function bootstrap() {
     }));
     app.use(cookieParser());
 
-    // CORS
+    // CORS - Production ready
     const allowedOrigins = [
         'http://localhost:3000',
+        'http://localhost:3001',
         'https://horse-frontend-khaki.vercel.app',
         process.env.APP_URL,
     ].filter(Boolean);
 
     app.enableCors({
         origin: (origin, callback) => {
-            // Allow requests with no origin (mobile apps, Postman, etc.)
+            // Allow requests with no origin (mobile apps, Postman, curl, etc.)
             if (!origin) return callback(null, true);
 
-            if (allowedOrigins.includes(origin)) {
+            if (allowedOrigins.some(allowed => origin.includes(allowed) || allowed.includes(origin))) {
                 callback(null, true);
             } else {
-                callback(new Error('Not allowed by CORS'));
+                console.warn(`⚠️ CORS blocked: ${origin}`);
+                callback(null, false);
             }
         },
         credentials: true,
+        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'X-Requested-With'],
+        exposedHeaders: ['Set-Cookie'],
+        maxAge: 86400, // 24 hours
     });
 
     // Serve static files (uploads)
