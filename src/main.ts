@@ -29,7 +29,7 @@ async function bootstrap() {
             // Allow requests with no origin (mobile apps, Postman, curl, etc.)
             if (!origin) return callback(null, true);
 
-            if (allowedOrigins.some(allowed => origin.includes(allowed) || allowed.includes(origin))) {
+            if (allowedOrigins.some(allowed => origin === allowed)) {
                 callback(null, true);
             } else {
                 console.warn(`⚠️ CORS blocked: ${origin}`);
