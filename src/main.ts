@@ -2,12 +2,13 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import * as cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import * as path from 'path';
 
 async function bootstrap() {
-    const app = await NestFactory.create(AppModule);
+    const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
     // Security
     app.use(helmet({
@@ -22,10 +23,10 @@ async function bootstrap() {
     });
 
     // Serve static files (uploads)
-    // const uploadsPath = path.join(process.cwd(), 'uploads');
-    // app.useStaticAssets(uploadsPath, {
-    //     prefix: '/uploads',
-    // });
+    const uploadsPath = path.join(process.cwd(), 'uploads');
+    app.useStaticAssets(uploadsPath, {
+        prefix: '/uploads',
+    });
 
     // Validation
     app.useGlobalPipes(
@@ -55,7 +56,7 @@ async function bootstrap() {
         SwaggerModule.setup('api/docs', app, document);
     }
 
-    const port = process.env.PORT || 3001;
+    const port = process.env.PORT || 5000;
     await app.listen(port);
     console.log(`Otbozor API running on http://localhost:${port}`);
     console.log(`Swagger docs: http://localhost:${port}/api/docs`);

@@ -119,7 +119,8 @@ export class BlogService {
         return this.prisma.blogPost.create({
             data: {
                 ...data,
-                status: BlogPostStatus.DRAFT,
+                status: BlogPostStatus.PUBLISHED,
+                publishedAt: new Date(),
             },
         });
     }

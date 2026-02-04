@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, UploadedFile, UseInterceptors, BadRequestException } from '@nestjs/common';
-// import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody, ApiResponse, ApiConsumes, ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { BlogService } from '../blog/blog.service';
@@ -150,7 +150,7 @@ export class AdminBlogController {
     }
 
     @Post('posts')
-    // @UseInterceptors(FileInterceptor('coverImage'))
+    @UseInterceptors(FileInterceptor('coverImage'))
     @ApiConsumes('multipart/form-data')
     @ApiOperation({
         summary: 'Yangi blog post yaratish (file upload bilan)',
