@@ -4,11 +4,10 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import * as cookieParser from 'cookie-parser';
 import helmet from 'helmet';
-import { NestExpressApplication } from '@nestjs/platform-express';
 import * as path from 'path';
 
 async function bootstrap() {
-    const app = await NestFactory.create<NestExpressApplication>(AppModule);
+    const app = await NestFactory.create(AppModule);
 
     // Security
     app.use(helmet({
@@ -23,10 +22,10 @@ async function bootstrap() {
     });
 
     // Serve static files (uploads)
-    const uploadsPath = path.join(process.cwd(), 'uploads');
-    app.useStaticAssets(uploadsPath, {
-        prefix: '/uploads',
-    });
+    // const uploadsPath = path.join(process.cwd(), 'uploads');
+    // app.useStaticAssets(uploadsPath, {
+    //     prefix: '/uploads',
+    // });
 
     // Validation
     app.useGlobalPipes(

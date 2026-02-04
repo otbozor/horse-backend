@@ -1,5 +1,5 @@
 import { Controller, Post, Body, UseGuards, UploadedFile, UseInterceptors, BadRequestException } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+// import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { MediaService } from './media.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -22,7 +22,7 @@ export class MediaController {
     constructor(private readonly mediaService: MediaService) { }
 
     @Post('upload')
-    @UseInterceptors(FileInterceptor('file'))
+    // @UseInterceptors(FileInterceptor('file'))
     @ApiConsumes('multipart/form-data')
     @ApiOperation({ summary: 'Upload file' })
     @ApiResponse({ status: 201, description: 'File uploaded successfully' })
