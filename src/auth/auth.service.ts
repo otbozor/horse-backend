@@ -299,10 +299,9 @@ export class AuthService {
 
         res.cookie('accessToken', tokens.accessToken, {
             httpOnly: true,
-            secure: isProduction,
+            secure: isProduction, // HTTPS only in production
             sameSite: isProduction ? 'none' : 'lax', // 'none' for cross-domain in production
             maxAge: 15 * 60 * 1000, // 15 minutes
-            domain: isProduction ? undefined : undefined, // Let browser handle domain
         });
 
         res.cookie('refreshToken', tokens.refreshToken, {
@@ -311,7 +310,6 @@ export class AuthService {
             sameSite: isProduction ? 'none' : 'lax',
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
             path: '/api/auth/refresh',
-            domain: isProduction ? undefined : undefined,
         });
     }
 

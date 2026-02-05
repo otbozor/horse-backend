@@ -29,7 +29,7 @@ async function bootstrap() {
             // Allow requests with no origin (mobile apps, Postman, curl, etc.)
             if (!origin) return callback(null, true);
 
-            if (allowedOrigins.some(allowed => origin === allowed)) {
+            if (allowedOrigins.some(allowed => origin === allowed || origin.startsWith(allowed))) {
                 callback(null, true);
             } else {
                 console.warn(`⚠️ CORS blocked: ${origin}`);
@@ -38,8 +38,10 @@ async function bootstrap() {
         },
         credentials: true,
         methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'X-Requested-With'],
+        allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'X-Requested-With', 'Accept'],
         exposedHeaders: ['Set-Cookie'],
+        preflightContinue: false,
+        optionsSuccessStatus: 204,
         maxAge: 86400, // 24 hours
     });
 
