@@ -22,6 +22,8 @@ async function bootstrap() {
         'http://localhost:3001',
         'https://horse-frontend-khaki.vercel.app',
         'https://horse-frontend-black.vercel.app',
+        'https://www.otbozor.uz',
+        'https://otbozor.uz',
         process.env.APP_URL,
         process.env.CORS_ORIGIN,
     ].filter(Boolean);
