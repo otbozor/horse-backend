@@ -78,7 +78,8 @@ async function bootstrap() {
             .addCookieAuth('accessToken')
             .build();
         const document = SwaggerModule.createDocument(app, config);
-        SwaggerModule.setup('api/docs', app, document);
+        SwaggerModule.setup('docs', app, document);
+
 
         console.log(`📚 Swagger docs available at: /api/docs`);
     }
