@@ -10,7 +10,7 @@ import * as bcrypt from 'bcrypt';
 
 export interface JwtPayload {
     sub: string;
-    telegramUserId?: string; // Changed from bigint to string for JSON serialization
+    telegramUserId?: string;
     username?: string;
     isAdmin?: boolean;
 }
@@ -22,8 +22,6 @@ export interface TokenPair {
 
 @Injectable()
 export class AuthService {
-    private pendingSessions: Map<string, { returnUrl?: string; createdAt: Date }> = new Map();
-
     constructor(
         private prisma: PrismaService,
         private jwtService: JwtService,
@@ -46,12 +44,10 @@ export class AuthService {
             throw new UnauthorizedException('Invalid credentials');
         }
 
-        // Check if user is admin
         if (!user.isAdmin) {
             throw new UnauthorizedException('Admin access required');
         }
 
-        // Update last login
         await this.prisma.user.update({
             where: { id: user.id },
             data: { lastLoginAt: new Date() },
@@ -60,23 +56,25 @@ export class AuthService {
         return this.generateTokensForAdmin(user.id, user.username!);
     }
 
-
     // Start Telegram auth flow
     async startTelegramAuth(dto: TelegramAuthDto): Promise<{ botDeepLink: string; sessionId: string }> {
         const sessionId = uuidv4();
         const botUsername = this.configService.get<string>('TELEGRAM_BOT_USERNAME');
 
-        // Store session for verification
-        this.pendingSessions.set(sessionId, {
-            returnUrl: dto.returnUrl,
-            createdAt: new Date(),
+        // Clean expired sessions
+        await this.cleanExpiredSessions();
+
+        // Store session in DB (expires in 10 minutes)
+        await this.prisma.telegramAuthSession.create({
+            data: {
+                id: sessionId,
+                type: 'SESSION',
+                data: dto.returnUrl || '',
+                expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+            },
         });
 
-        // Clean old sessions (older than 10 minutes)
-        this.cleanOldSessions();
-
         const botDeepLink = `https://t.me/${botUsername}?start=${sessionId}`;
-
         return { botDeepLink, sessionId };
     }
 
@@ -93,53 +91,46 @@ export class AuthService {
             console.log('📞 Telegram callback received:', {
                 sessionId: dto.sessionId,
                 telegramUserId: dto.telegramUserId,
-                phone: dto.phone
+                phone: dto.phone,
             });
 
-            const session = this.pendingSessions.get(dto.sessionId);
+            const session = await this.prisma.telegramAuthSession.findUnique({
+                where: { id: dto.sessionId },
+            });
 
-            if (!session) {
-                console.error('❌ Session not found:', dto.sessionId);
+            if (!session || session.type !== 'SESSION' || session.expiresAt < new Date()) {
+                console.error('❌ Session not found or expired:', dto.sessionId);
+                if (session) await this.prisma.telegramAuthSession.delete({ where: { id: dto.sessionId } });
                 return { success: false, error: 'Session expired or not found. Please start authentication again.' };
             }
 
-            // Phone number is required
             if (!dto.phone) {
-                console.error('❌ Phone number missing');
                 return { success: false, error: 'Phone number is required for registration' };
             }
 
-            // Validate phone number format
             if (!/^\+?[1-9]\d{1,14}$/.test(dto.phone)) {
-                console.error('❌ Invalid phone format:', dto.phone);
                 return { success: false, error: 'Invalid phone number format' };
             }
 
-            // Check if phone number already exists for a different Telegram user
             const existingUserWithPhone = await this.prisma.user.findFirst({
                 where: {
                     phone: dto.phone,
-                    NOT: {
-                        telegramUserId: BigInt(dto.telegramUserId)
-                    }
+                    NOT: { telegramUserId: BigInt(dto.telegramUserId) },
                 },
             });
 
             if (existingUserWithPhone) {
-                console.error('❌ Phone already registered:', dto.phone);
                 return {
                     success: false,
-                    error: 'This phone number is already registered. Please use a different phone number or login with your existing account.'
+                    error: 'This phone number is already registered. Please use a different phone number or login with your existing account.',
                 };
             }
 
-            // Create or update user
             let user = await this.prisma.user.findUnique({
                 where: { telegramUserId: BigInt(dto.telegramUserId) },
             });
 
             if (!user) {
-                // New user registration
                 console.log('✅ Creating new user:', dto.telegramUserId);
                 user = await this.prisma.user.create({
                     data: {
@@ -147,12 +138,11 @@ export class AuthService {
                         telegramUsername: dto.telegramUsername || `user_${dto.telegramUserId}`,
                         displayName: dto.displayName || dto.telegramUsername || `User ${dto.telegramUserId}`,
                         phone: dto.phone,
-                        isVerified: true, // Auto-verify since phone is from Telegram
+                        isVerified: true,
                         status: 'ACTIVE',
                     },
                 });
             } else {
-                // Existing user login
                 console.log('✅ Updating existing user:', user.id);
                 user = await this.prisma.user.update({
                     where: { id: user.id },
@@ -167,49 +157,46 @@ export class AuthService {
 
             // Generate one-time code (valid for 5 minutes)
             const code = uuidv4().substring(0, 8).toUpperCase();
-            const codeExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
-
-            // Store code with user ID and expiry
-            this.pendingSessions.set(`code:${code}`, {
-                returnUrl: user.id, // Using returnUrl field to store userId
-                createdAt: codeExpiry,
-            });
 
             // Remove original session
-            this.pendingSessions.delete(dto.sessionId);
+            await this.prisma.telegramAuthSession.delete({ where: { id: dto.sessionId } });
+
+            // Store code in DB
+            await this.prisma.telegramAuthSession.create({
+                data: {
+                    id: `code:${code}`,
+                    type: 'CODE',
+                    data: user.id,
+                    expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+                },
+            });
 
             console.log('✅ Code generated:', code);
-
-            return {
-                success: true,
-                code,
-            };
+            return { success: true, code };
         } catch (error) {
             console.error('❌ Telegram callback error:', error);
-            console.error('Error stack:', error.stack);
-            return {
-                success: false,
-                error: `Database error: ${error.message}`
-            };
+            return { success: false, error: `Database error: ${error.message}` };
         }
     }
 
     // Verify code and issue tokens
     async verifyCode(code: string): Promise<TokenPair | null> {
-        const session = this.pendingSessions.get(`code:${code}`);
+        const session = await this.prisma.telegramAuthSession.findUnique({
+            where: { id: `code:${code}` },
+        });
 
         if (!session) {
             return null;
         }
 
-        // Check if code has expired (createdAt field stores expiry time)
-        if (new Date() > session.createdAt) {
-            this.pendingSessions.delete(`code:${code}`);
+        // Check expiry
+        if (new Date() > session.expiresAt) {
+            await this.prisma.telegramAuthSession.delete({ where: { id: `code:${code}` } });
             return null;
         }
 
-        const userId = session.returnUrl; // We stored userId here
-        this.pendingSessions.delete(`code:${code}`);
+        const userId = session.data;
+        await this.prisma.telegramAuthSession.delete({ where: { id: `code:${code}` } });
 
         const user = await this.prisma.user.findUnique({
             where: { id: userId },
@@ -219,7 +206,6 @@ export class AuthService {
             return null;
         }
 
-        // Update last login
         await this.prisma.user.update({
             where: { id: user.id },
             data: { lastLoginAt: new Date() },
@@ -232,7 +218,7 @@ export class AuthService {
     async generateTokens(userId: string, telegramUserId: bigint): Promise<TokenPair> {
         const payload: JwtPayload = {
             sub: userId,
-            telegramUserId: telegramUserId.toString(), // Convert BigInt to string
+            telegramUserId: telegramUserId.toString(),
         };
 
         const accessToken = this.jwtService.sign(payload);
@@ -242,12 +228,11 @@ export class AuthService {
             expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') || '7d',
         });
 
-        // Store refresh token in database
         await this.prisma.refreshToken.create({
             data: {
                 userId,
                 token: refreshToken,
-                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
             },
         });
 
@@ -269,18 +254,16 @@ export class AuthService {
             expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') || '7d',
         });
 
-        // Store refresh token in database
         await this.prisma.refreshToken.create({
             data: {
                 userId,
                 token: refreshToken,
-                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
             },
         });
 
         return { accessToken, refreshToken };
     }
-
 
     // Refresh tokens
     async refreshTokens(refreshToken: string): Promise<TokenPair> {
@@ -300,12 +283,10 @@ export class AuthService {
             throw new UnauthorizedException('User not found or banned');
         }
 
-        // Delete old refresh token
         await this.prisma.refreshToken.delete({
             where: { id: storedToken.id },
         });
 
-        // Generate new tokens
         return this.generateTokens(user.id, user.telegramUserId);
     }
 
@@ -327,22 +308,21 @@ export class AuthService {
             sameSite: isProduction ? 'none' : 'lax',
         });
 
-        // Cookie options for production cross-domain
         const cookieOptions = {
             httpOnly: true,
-            secure: isProduction, // HTTPS only in production
-            sameSite: isProduction ? 'none' as const : 'lax' as const, // 'none' for cross-domain in production
+            secure: isProduction,
+            sameSite: isProduction ? 'none' as const : 'lax' as const,
         };
 
         res.cookie('accessToken', tokens.accessToken, {
             ...cookieOptions,
-            maxAge: 15 * 60 * 1000, // 15 minutes
+            maxAge: 15 * 60 * 1000,
             path: '/',
         });
 
         res.cookie('refreshToken', tokens.refreshToken, {
             ...cookieOptions,
-            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+            maxAge: 7 * 24 * 60 * 60 * 1000,
             path: '/',
         });
 
@@ -364,13 +344,39 @@ export class AuthService {
         res.clearCookie('refreshToken', cookieOptions);
     }
 
-    // Clean old sessions (older than 10 minutes)
-    private cleanOldSessions(): void {
-        const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
-        for (const [key, session] of this.pendingSessions.entries()) {
-            if (session.createdAt < tenMinutesAgo) {
-                this.pendingSessions.delete(key);
-            }
+    // DEV ONLY: Telegram botni simulatsiya qilmasdan test login
+    async devLogin(phone: string, displayName: string): Promise<TokenPair> {
+        const fakeTelegramId = BigInt(9999999999);
+
+        let user = await this.prisma.user.findUnique({
+            where: { telegramUserId: fakeTelegramId },
+        });
+
+        if (!user) {
+            user = await this.prisma.user.create({
+                data: {
+                    telegramUserId: fakeTelegramId,
+                    telegramUsername: 'dev_test_user',
+                    displayName,
+                    phone,
+                    isVerified: true,
+                    status: 'ACTIVE',
+                },
+            });
+        } else {
+            user = await this.prisma.user.update({
+                where: { id: user.id },
+                data: { displayName, phone, lastLoginAt: new Date() },
+            });
         }
+
+        return this.generateTokens(user.id, user.telegramUserId);
+    }
+
+    // Clean expired sessions from DB
+    private async cleanExpiredSessions(): Promise<void> {
+        await this.prisma.telegramAuthSession.deleteMany({
+            where: { expiresAt: { lt: new Date() } },
+        });
     }
 }

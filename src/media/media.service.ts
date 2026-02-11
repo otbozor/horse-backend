@@ -1,33 +1,27 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import { v4 as uuidv4 } from 'uuid';
-import * as fs from 'fs';
-import * as path from 'path';
+import { v2 as cloudinary } from 'cloudinary';
 
 @Injectable()
 export class MediaService {
-    private uploadsDir = path.join(process.cwd(), 'uploads');
-    private apiUrl: string;
-
     constructor(
         private prisma: PrismaService,
         private configService: ConfigService,
     ) {
-        // Get API URL from environment or use default
-        this.apiUrl = this.configService.get<string>('API_URL') || 'http://localhost:5000';
-        
-        // Ensure uploads directory exists
-        if (!fs.existsSync(this.uploadsDir)) {
-            fs.mkdirSync(this.uploadsDir, { recursive: true });
-        }
+        // Configure Cloudinary
+        cloudinary.config({
+            cloud_name: this.configService.get<string>('CLOUDINARY_CLOUD_NAME'),
+            api_key: this.configService.get<string>('CLOUDINARY_API_KEY'),
+            api_secret: this.configService.get<string>('CLOUDINARY_API_SECRET'),
+        });
     }
 
-    // Generate file path for upload
-    async getUploadPath(
-        entityType: 'listings' | 'blog' | 'events' | 'avatars',
+    // Upload file to Cloudinary
+    async uploadFile(
         file: Express.Multer.File,
-    ): Promise<{ filePath: string; fileUrl: string; fileName: string }> {
+        folder: 'listings' | 'blog' | 'events' | 'avatars',
+    ): Promise<{ url: string; publicId: string; type: 'IMAGE' | 'VIDEO' }> {
         // Validate file type
         const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/webm'];
         if (!allowedMimes.includes(file.mimetype)) {
@@ -40,40 +34,48 @@ export class MediaService {
             throw new BadRequestException('File too large. Max 50MB');
         }
 
-        const fileName = `${uuidv4()}-${Date.now()}${path.extname(file.originalname)}`;
-        const entityDir = path.join(this.uploadsDir, entityType);
-        
-        // Create entity directory if not exists
-        if (!fs.existsSync(entityDir)) {
-            fs.mkdirSync(entityDir, { recursive: true });
-        }
+        const isVideo = file.mimetype.startsWith('video/');
+        const resourceType = isVideo ? 'video' : 'image';
 
-        const filePath = path.join(entityDir, fileName);
-        const relativePath = `/uploads/${entityType}/${fileName}`;
-        const fileUrl = `${this.apiUrl}${relativePath}`;
-
-        return { filePath, fileUrl, fileName };
-    }
-
-    // Save file to disk
-    async saveFile(file: Express.Multer.File, filePath: string): Promise<void> {
-        return new Promise((resolve, reject) => {
-            fs.writeFile(filePath, file.buffer, (err) => {
-                if (err) reject(err);
-                else resolve();
-            });
-        });
-    }
-
-    // Delete file from disk
-    async deleteFile(fileUrl: string): Promise<void> {
         try {
-            const filePath = path.join(process.cwd(), 'public', fileUrl);
-            if (fs.existsSync(filePath)) {
-                fs.unlinkSync(filePath);
-            }
+            // Upload to Cloudinary
+            const result = await new Promise<any>((resolve, reject) => {
+                const uploadStream = cloudinary.uploader.upload_stream(
+                    {
+                        folder: `horse-marketplace/${folder}`,
+                        resource_type: resourceType,
+                        transformation: isVideo ? undefined : [
+                            { width: 1920, height: 1080, crop: 'limit', quality: 'auto' },
+                        ],
+                    },
+                    (error, result) => {
+                        if (error) reject(error);
+                        else resolve(result);
+                    },
+                );
+                uploadStream.end(file.buffer);
+            });
+
+            return {
+                url: result.secure_url,
+                publicId: result.public_id,
+                type: isVideo ? 'VIDEO' : 'IMAGE',
+            };
         } catch (error) {
-            console.error('Error deleting file:', error);
+            console.error('Cloudinary upload error:', error);
+            throw new BadRequestException('Failed to upload file');
+        }
+    }
+
+    // Delete file from Cloudinary
+    async deleteFile(publicId: string): Promise<void> {
+        try {
+            const isVideo = publicId.includes('video') || publicId.includes('.mp4');
+            await cloudinary.uploader.destroy(publicId, {
+                resource_type: isVideo ? 'video' : 'image',
+            });
+        } catch (error) {
+            console.error('Error deleting file from Cloudinary:', error);
         }
     }
 

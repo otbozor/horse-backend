@@ -12,6 +12,7 @@ import { AdminModule } from './admin/admin.module';
 import { TelegramModule } from './telegram/telegram.module';
 import { EventsModule } from './events/events.module';
 import { BlogModule } from './blog/blog.module';
+import { ProductsModule } from './products/products.module';
 
 @Module({
     imports: [
@@ -42,9 +43,10 @@ import { BlogModule } from './blog/blog.module';
         // Telegram Bot
         TelegramModule,
 
-        // Events & Blog
+        // Events, Blog & Products
         EventsModule,
         BlogModule,
+        ProductsModule,
     ],
 })
 export class AppModule { }

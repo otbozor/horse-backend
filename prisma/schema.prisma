@@ -43,6 +43,7 @@ model User {
 
   // Relations
   listings         HorseListing[]
+  products         Product[]
   favorites        Favorite[]
   viewLogs         ViewLog[]
   auditLogs        AuditLog[]
@@ -59,6 +60,17 @@ model RefreshToken {
 
   @@index([userId])
   @@map("refresh_tokens")
+}
+
+model TelegramAuthSession {
+  id        String   @id               // sessionId yoki "code:XXXXXXXX"
+  type      String                     // 'SESSION' yoki 'CODE'
+  data      String                     // returnUrl (SESSION) yoki userId (CODE)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@map("telegram_auth_sessions")
 }
 
 // ============================================
@@ -120,7 +132,7 @@ enum HorsePurpose {
 enum HorseGender {
   AYGIR
   BIYA
-  AXTa
+  AXTA
 }
 
 enum ListingStatus {
@@ -286,6 +298,78 @@ model Event {
   @@index([status])
   @@index([startsAt])
   @@map("events")
+}
+
+// ============================================
+// PRODUCTS
+// ============================================
+
+model ProductCategory {
+  id       String    @id @default(uuid())
+  name     String
+  slug     String    @unique
+  
+  products Product[]
+
+  @@map("product_categories")
+}
+
+enum ProductStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum StockStatus {
+  IN_STOCK
+  OUT_OF_STOCK
+  PREORDER
+}
+
+model Product {
+  id            String        @id @default(uuid())
+  title         String
+  slug          String        @unique
+  categoryId    String?       @map("category_id")
+  userId        String?       @map("user_id")
+  description   String?       @db.Text
+
+  priceAmount   Decimal       @map("price_amount") @db.Decimal(15, 2)
+  priceCurrency Currency      @default(UZS) @map("price_currency")
+
+  hasDelivery   Boolean       @default(false) @map("has_delivery")
+  stockStatus   StockStatus   @default(IN_STOCK) @map("stock_status")
+  status        ProductStatus @default(DRAFT)
+
+  viewCount     Int           @default(0) @map("view_count")
+
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  publishedAt   DateTime?     @map("published_at")
+
+  category      ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  user          User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  media         ProductMedia[]
+
+  @@index([categoryId])
+  @@index([userId])
+  @@index([status])
+  @@index([publishedAt])
+  @@map("products")
+}
+
+model ProductMedia {
+  id        String   @id @default(uuid())
+  productId String   @map("product_id")
+  url       String
+  thumbUrl  String?  @map("thumb_url")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("product_media")
 }
 
 // ============================================

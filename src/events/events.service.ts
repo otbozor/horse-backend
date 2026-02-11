@@ -71,6 +71,7 @@ export class EventsService {
         regionId?: string;
         status?: EventStatus;
         upcoming?: boolean;
+        allStatuses?: boolean;
     }) {
         const where: any = {};
 
@@ -78,10 +79,12 @@ export class EventsService {
             where.regionId = filters.regionId;
         }
 
-        if (filters?.status) {
-            where.status = filters.status;
-        } else {
-            where.status = EventStatus.PUBLISHED;
+        if (!filters?.allStatuses) {
+            if (filters?.status) {
+                where.status = filters.status;
+            } else {
+                where.status = EventStatus.PUBLISHED;
+            }
         }
 
         if (filters?.upcoming) {
@@ -115,7 +118,19 @@ export class EventsService {
     async createEvent(data: any) {
         return this.prisma.event.create({
             data: {
-                ...data,
+                title: data.title,
+                slug: data.slug,
+                description: data.description || null,
+                regionId: data.regionId,
+                districtId: data.districtId || null,
+                addressText: data.addressText || null,
+                mapUrl: data.mapUrl || null,
+                startsAt: new Date(data.startsAt),
+                endsAt: data.endsAt ? new Date(data.endsAt) : null,
+                organizerName: data.organizerName,
+                contactTelegram: data.contactTelegram || null,
+                prizePool: data.prizePool ? Number(data.prizePool) : null,
+                rules: data.rules || null,
                 status: EventStatus.DRAFT,
             },
             include: {
@@ -126,9 +141,25 @@ export class EventsService {
     }
 
     async updateEvent(id: string, data: any) {
+        const updateData: any = {};
+        if (data.title !== undefined) updateData.title = data.title;
+        if (data.slug !== undefined) updateData.slug = data.slug;
+        if (data.description !== undefined) updateData.description = data.description || null;
+        if (data.regionId !== undefined) updateData.regionId = data.regionId;
+        if (data.districtId !== undefined) updateData.districtId = data.districtId || null;
+        if (data.addressText !== undefined) updateData.addressText = data.addressText || null;
+        if (data.mapUrl !== undefined) updateData.mapUrl = data.mapUrl || null;
+        if (data.startsAt !== undefined) updateData.startsAt = new Date(data.startsAt);
+        if (data.endsAt !== undefined) updateData.endsAt = data.endsAt ? new Date(data.endsAt) : null;
+        if (data.organizerName !== undefined) updateData.organizerName = data.organizerName;
+        if (data.contactTelegram !== undefined) updateData.contactTelegram = data.contactTelegram || null;
+        if (data.prizePool !== undefined) updateData.prizePool = data.prizePool ? Number(data.prizePool) : null;
+        if (data.rules !== undefined) updateData.rules = data.rules || null;
+        if (data.status !== undefined) updateData.status = data.status;
+
         return this.prisma.event.update({
             where: { id },
-            data,
+            data: updateData,
             include: {
                 region: true,
                 district: true,

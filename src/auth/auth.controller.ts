@@ -8,6 +8,7 @@ import {
     HttpCode,
     HttpStatus,
     UnauthorizedException,
+    ForbiddenException,
     UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
@@ -346,6 +347,40 @@ export class AuthController {
         return {
             success: true,
             message: 'Logged out successfully. All tokens have been invalidated.',
+            timestamp: new Date().toISOString(),
+        };
+    }
+
+    // ============================================================
+    // DEV ONLY: Telegram botni simulatsiya qilmasdan test login
+    // Faqat NODE_ENV !== 'production' bo'lganda ishlaydi
+    // ============================================================
+    @Post('dev-login')
+    @HttpCode(HttpStatus.OK)
+    async devLogin(
+        @Body() body: { phone?: string; displayName?: string },
+        @Res({ passthrough: true }) res: Response,
+    ): Promise<AuthResponse<{ tokens: { accessToken: string; refreshToken: string; expiresIn: string } }>> {
+        if (process.env.NODE_ENV === 'production') {
+            throw new ForbiddenException('Dev login is not available in production');
+        }
+
+        const phone = body.phone || '+998901234567';
+        const displayName = body.displayName || 'Test User';
+
+        const tokens = await this.authService.devLogin(phone, displayName);
+        this.authService.setTokenCookies(res, tokens);
+
+        return {
+            success: true,
+            data: {
+                tokens: {
+                    accessToken: tokens.accessToken,
+                    refreshToken: tokens.refreshToken,
+                    expiresIn: '15m',
+                },
+            },
+            message: '[DEV] Login successful',
             timestamp: new Date().toISOString(),
         };
     }

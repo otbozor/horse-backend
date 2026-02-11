@@ -1,5 +1,5 @@
 import { Controller, Post, Body, UseGuards, UploadedFile, UseInterceptors, BadRequestException } from '@nestjs/common';
-// import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { MediaService } from './media.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -22,30 +22,25 @@ export class MediaController {
     constructor(private readonly mediaService: MediaService) { }
 
     @Post('upload')
-    // @UseInterceptors(FileInterceptor('file'))
+    @UseInterceptors(FileInterceptor('file'))
     @ApiConsumes('multipart/form-data')
-    @ApiOperation({ summary: 'Upload file' })
+    @ApiOperation({ summary: 'Upload file to Cloudinary' })
     @ApiResponse({ status: 201, description: 'File uploaded successfully' })
     async uploadFile(
         @UploadedFile() file: Express.Multer.File,
-        @Body() body: { entityType: 'listings' | 'blog' | 'events' | 'avatars' },
+        @Body() body: { folder: 'listings' | 'blog' | 'events' | 'avatars' },
         @CurrentUser() user: User,
-    ): Promise<ApiResponse<{ fileUrl: string; fileName: string }>> {
+    ): Promise<ApiResponse<{ url: string; publicId: string; type: 'IMAGE' | 'VIDEO' }>> {
         if (!file) {
             throw new BadRequestException('No file provided');
         }
 
-        const { filePath, fileUrl, fileName } = await this.mediaService.getUploadPath(
-            body.entityType,
-            file,
-        );
-
-        await this.mediaService.saveFile(file, filePath);
+        const result = await this.mediaService.uploadFile(file, body.folder);
 
         return {
             success: true,
-            data: { fileUrl, fileName },
-            message: 'File uploaded successfully',
+            data: result,
+            message: 'File uploaded successfully to Cloudinary',
             timestamp: new Date().toISOString(),
         };
     }

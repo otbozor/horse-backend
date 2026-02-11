@@ -209,9 +209,8 @@ export class AdminBlogController {
         let coverImage: string | undefined;
 
         if (file) {
-            const { filePath, fileUrl } = await this.mediaService.getUploadPath('blog', file);
-            await this.mediaService.saveFile(file, filePath);
-            coverImage = fileUrl;
+            const result = await this.mediaService.uploadFile(file, 'blog');
+            coverImage = result.url;
         }
 
         const post = await this.blogService.createPost({
