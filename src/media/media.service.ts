@@ -5,6 +5,8 @@ import { v2 as cloudinary } from 'cloudinary';
 
 @Injectable()
 export class MediaService {
+    private isCloudinaryConfigured = false;
+
     constructor(
         private prisma: PrismaService,
         private configService: ConfigService,
@@ -21,6 +23,7 @@ export class MediaService {
             });
         } else {
             console.log('✅ Cloudinary configured:', cloudName);
+            this.isCloudinaryConfigured = true;
         }
 
         cloudinary.config({
@@ -45,6 +48,12 @@ export class MediaService {
         const maxSize = 50 * 1024 * 1024;
         if (file.size > maxSize) {
             throw new BadRequestException('File too large. Max 50MB');
+        }
+
+        if (!this.isCloudinaryConfigured) {
+            throw new BadRequestException(
+                'Cloudinary is not configured. Check CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET environment variables.',
+            );
         }
 
         const isVideo = file.mimetype.startsWith('video/');

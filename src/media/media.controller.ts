@@ -2,6 +2,7 @@ import { Controller, Post, Body, UseGuards, UploadedFile, UseInterceptors, BadRe
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { MediaService } from './media.service';
+import { UploadFileDto } from './dto/upload.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from '@prisma/client';
@@ -28,7 +29,7 @@ export class MediaController {
     @ApiResponse({ status: 201, description: 'File uploaded successfully' })
     async uploadFile(
         @UploadedFile() file: Express.Multer.File,
-        @Body() body: { folder: 'listings' | 'blog' | 'events' | 'avatars' },
+        @Body() body: UploadFileDto,
         @CurrentUser() user: User,
     ): Promise<ApiResponse<{ url: string; publicId: string; type: 'IMAGE' | 'VIDEO' }>> {
         console.log('📤 Upload request:', {
@@ -45,11 +46,8 @@ export class MediaController {
             );
         }
 
-        if (!body?.folder) {
-            body = { ...body, folder: 'listings' };
-        }
-
-        const result = await this.mediaService.uploadFile(file, body.folder);
+        const folder = body?.folder || 'listings';
+        const result = await this.mediaService.uploadFile(file, folder);
 
         return {
             success: true,
