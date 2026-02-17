@@ -343,6 +343,7 @@ model Product {
   hasDelivery   Boolean       @default(false) @map("has_delivery")
   stockStatus   StockStatus   @default(IN_STOCK) @map("stock_status")
   status        ProductStatus @default(DRAFT)
+  isPaid        Boolean       @default(false) @map("is_paid")
 
   viewCount     Int           @default(0) @map("view_count")
 
@@ -353,6 +354,7 @@ model Product {
   category      ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   user          User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
   media         ProductMedia[]
+  payments      Payment[]
 
   @@index([categoryId])
   @@index([userId])
@@ -425,28 +427,43 @@ enum PaymentPackage {
 }
 
 model Payment {
-  id                  String         @id @default(uuid())
-  listingId           String         @map("listing_id")
-  userId              String         @map("user_id")
-  packageType         PaymentPackage @map("package_type")
-  amount              Decimal        @map("amount") @db.Decimal(15, 2)
-  status              PaymentStatus  @default(PENDING)
+  id                  String          @id @default(uuid())
+  listingId           String?         @map("listing_id")
+  productId           String?         @map("product_id")
+  userId              String          @map("user_id")
+  packageType         PaymentPackage? @map("package_type")
+  amount              Decimal         @map("amount") @db.Decimal(15, 2)
+  status              PaymentStatus   @default(PENDING)
 
   // Click fields
-  clickTransId        String?        @map("click_trans_id")
-  clickPaydocId       String?        @map("click_paydoc_id")
-  merchantPrepareId   Int            @map("merchant_prepare_id") @default(0)
+  clickTransId        String?         @map("click_trans_id")
+  clickPaydocId       String?         @map("click_paydoc_id")
+  merchantPrepareId   Int             @map("merchant_prepare_id") @default(0)
 
-  createdAt           DateTime       @default(now()) @map("created_at")
-  updatedAt           DateTime       @updatedAt @map("updated_at")
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
 
-  listing             HorseListing   @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  user                User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing             HorseListing?   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  product             Product?        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([listingId])
+  @@index([productId])
   @@index([userId])
   @@index([status])
   @@map("payments")
+}
+
+// ============================================
+// APP SETTINGS
+// ============================================
+
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
 }
 
 // ============================================

@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
-import { PaymentStatus, PaymentPackage, ListingStatus } from '@prisma/client';
+import { PaymentStatus, PaymentPackage, ListingStatus, ProductStatus } from '@prisma/client';
 import * as crypto from 'crypto';
 
 const PACKAGES = {
@@ -69,6 +69,42 @@ export class PaymentService {
             amount: pkg.amount,
             clickUrl,
         };
+    }
+
+    // Create invoice for product listing
+    async createProductInvoice(userId: string, productId: string) {
+        const product = await this.prisma.product.findUnique({ where: { id: productId } });
+
+        if (!product) throw new NotFoundException('Mahsulot topilmadi');
+        if (product.userId !== userId) throw new BadRequestException('Bu sizning mahsulotingiz emas');
+        if (product.isPaid) throw new BadRequestException("Mahsulot allaqachon to'langan");
+
+        // Get price from settings
+        const setting = await this.prisma.appSetting.findUnique({
+            where: { key: 'product_listing_price' },
+        });
+        const amount = setting ? Number(setting.value) : 35000;
+
+        const payment = await this.prisma.payment.create({
+            data: {
+                productId,
+                userId,
+                amount,
+                status: PaymentStatus.PENDING,
+                merchantPrepareId: Math.floor(Math.random() * 2000000000) + 1,
+            },
+        });
+
+        const returnUrl = `${this.frontendUrl}/mahsulot/${productId}/tolov/natija?paymentId=${payment.id}`;
+        const clickUrl =
+            `https://my.click.uz/services/pay` +
+            `?service_id=${this.serviceId}` +
+            `&merchant_id=${this.merchantId}` +
+            `&amount=${amount}` +
+            `&transaction_param=${payment.id}` +
+            `&return_url=${encodeURIComponent(returnUrl)}`;
+
+        return { paymentId: payment.id, amount, clickUrl };
     }
 
     // Click PREPARE webhook (action=0)
@@ -197,26 +233,44 @@ export class PaymentService {
             return { error: 0, error_note: 'Success' };
         }
 
-        // ✅ Complete payment and activate listing
-        await this.prisma.$transaction([
-            this.prisma.payment.update({
-                where: { id: merchant_trans_id },
-                data: {
-                    status: PaymentStatus.COMPLETED,
-                    clickTransId: click_trans_id,
-                    clickPaydocId: click_paydoc_id,
-                },
-            }),
-            this.prisma.horseListing.update({
-                where: { id: payment.listingId },
-                data: {
-                    isPaid: true,
-                    publishedAt: new Date(),
-                },
-            }),
-        ]);
-
-        console.log('✅ Payment completed, listing activated:', payment.listingId);
+        // ✅ Complete payment
+        if (payment.listingId) {
+            await this.prisma.$transaction([
+                this.prisma.payment.update({
+                    where: { id: merchant_trans_id },
+                    data: {
+                        status: PaymentStatus.COMPLETED,
+                        clickTransId: click_trans_id,
+                        clickPaydocId: click_paydoc_id,
+                    },
+                }),
+                this.prisma.horseListing.update({
+                    where: { id: payment.listingId },
+                    data: { isPaid: true, publishedAt: new Date() },
+                }),
+            ]);
+            console.log('✅ Listing payment completed:', payment.listingId);
+        } else if (payment.productId) {
+            await this.prisma.$transaction([
+                this.prisma.payment.update({
+                    where: { id: merchant_trans_id },
+                    data: {
+                        status: PaymentStatus.COMPLETED,
+                        clickTransId: click_trans_id,
+                        clickPaydocId: click_paydoc_id,
+                    },
+                }),
+                this.prisma.product.update({
+                    where: { id: payment.productId },
+                    data: {
+                        isPaid: true,
+                        status: ProductStatus.PUBLISHED,
+                        publishedAt: new Date(),
+                    },
+                }),
+            ]);
+            console.log('✅ Product payment completed:', payment.productId);
+        }
 
         return {
             click_trans_id: click_trans_id,
@@ -227,7 +281,24 @@ export class PaymentService {
         };
     }
 
-    // Check payment status
+    // Check product payment status
+    async getProductPaymentStatus(paymentId: string, userId: string) {
+        const payment = await this.prisma.payment.findUnique({
+            where: { id: paymentId },
+            include: { product: { select: { id: true, title: true, slug: true, isPaid: true } } },
+        });
+        if (!payment) throw new NotFoundException('Payment not found');
+        if (payment.userId !== userId) throw new BadRequestException('Access denied');
+        return {
+            id: payment.id,
+            status: payment.status,
+            amount: Number(payment.amount),
+            product: payment.product,
+            createdAt: payment.createdAt,
+        };
+    }
+
+    // Check listing payment status
     async getPaymentStatus(paymentId: string, userId: string) {
         const payment = await this.prisma.payment.findUnique({
             where: { id: paymentId },
