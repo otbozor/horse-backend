@@ -49,10 +49,12 @@ export class EventsController {
     async getAllEvents(
         @Query('regionId') regionId?: string,
         @Query('upcoming') upcoming?: string,
+        @Query('past') past?: string,
     ) {
         const events = await this.eventsService.getAllEvents({
             regionId,
             upcoming: upcoming === 'true',
+            past: past === 'true',
         });
 
         return {

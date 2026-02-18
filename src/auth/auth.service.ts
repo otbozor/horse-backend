@@ -104,33 +104,34 @@ export class AuthService {
                 return { success: false, error: 'Session expired or not found. Please start authentication again.' };
             }
 
-            if (!dto.phone) {
-                return { success: false, error: 'Phone number is required for registration' };
-            }
-
-            if (!/^\+?[1-9]\d{1,14}$/.test(dto.phone)) {
-                return { success: false, error: 'Invalid phone number format' };
-            }
-
-            const existingUserWithPhone = await this.prisma.user.findFirst({
-                where: {
-                    phone: dto.phone,
-                    NOT: { telegramUserId: BigInt(dto.telegramUserId) },
-                },
-            });
-
-            if (existingUserWithPhone) {
-                return {
-                    success: false,
-                    error: 'This phone number is already registered. Please use a different phone number or login with your existing account.',
-                };
-            }
-
             let user = await this.prisma.user.findUnique({
                 where: { telegramUserId: BigInt(dto.telegramUserId) },
             });
 
             if (!user) {
+                // New user — phone required
+                if (!dto.phone) {
+                    return { success: false, error: 'Phone number is required for new users' };
+                }
+
+                if (!/^\+?[1-9]\d{1,14}$/.test(dto.phone)) {
+                    return { success: false, error: 'Invalid phone number format' };
+                }
+
+                const existingUserWithPhone = await this.prisma.user.findFirst({
+                    where: {
+                        phone: dto.phone,
+                        NOT: { telegramUserId: BigInt(dto.telegramUserId) },
+                    },
+                });
+
+                if (existingUserWithPhone) {
+                    return {
+                        success: false,
+                        error: 'This phone number is already registered.',
+                    };
+                }
+
                 console.log('✅ Creating new user:', dto.telegramUserId);
                 user = await this.prisma.user.create({
                     data: {
@@ -143,20 +144,19 @@ export class AuthService {
                     },
                 });
             } else {
-                console.log('✅ Updating existing user:', user.id);
+                // Existing user — just update metadata, phone not required
+                console.log('✅ Existing user login:', user.id);
                 user = await this.prisma.user.update({
                     where: { id: user.id },
                     data: {
                         telegramUsername: dto.telegramUsername || user.telegramUsername,
-                        phone: dto.phone,
-                        isVerified: true,
                         lastLoginAt: new Date(),
                     },
                 });
             }
 
-            // Generate one-time code (valid for 5 minutes)
-            const code = uuidv4().substring(0, 8).toUpperCase();
+            // Generate 6-digit numeric one-time code (valid for 5 minutes)
+            const code = Math.floor(100000 + Math.random() * 900000).toString();
 
             // Remove original session
             await this.prisma.telegramAuthSession.delete({ where: { id: dto.sessionId } });

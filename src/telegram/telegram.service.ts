@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectBot, Update, Start, Ctx, Help, On } from 'nestjs-telegraf';
 import { Telegraf, Context } from 'telegraf';
 import { AuthService } from '../auth/auth.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 interface UserState {
     sessionId: string;
@@ -20,6 +21,7 @@ export class TelegramBotService {
     constructor(
         @InjectBot() private readonly bot: Telegraf<Context>,
         private readonly authService: AuthService,
+        private readonly prisma: PrismaService,
     ) { }
 
     @Start()
@@ -46,48 +48,65 @@ export class TelegramBotService {
             const telegramUsername = ctx.from?.username;
             const displayName = ctx.from?.first_name + (ctx.from?.last_name ? ` ${ctx.from.last_name}` : '');
 
-            console.log('🚀 Telegram auth started:', {
-                sessionId,
-                telegramUserId,
-                telegramUsername,
-                displayName
-            });
-
             if (!telegramUserId) {
                 await ctx.reply('❌ Xatolik: Telegram ma\'lumotlaringizni ololmadik.');
                 return;
             }
 
-            // Save state - waiting for phone
-            this.userStates.set(telegramUserId, {
-                sessionId,
-                step: 'WAITING_PHONE',
-                telegramUserId,
-                telegramUsername,
-                displayName,
+            // Mavjud foydalanuvchini tekshirish
+            const existingUser = await this.prisma.user.findUnique({
+                where: { telegramUserId: BigInt(telegramUserId) },
             });
 
-            console.log('✅ User state saved:', telegramUserId);
+            if (existingUser) {
+                // Ro'yxatdan o'tgan — telefon so'ramasdan to'g'ridan-to'g'ri kod yuborish
+                console.log('✅ Existing user, sending code directly:', telegramUserId);
 
-            // Ask for phone number with contact button
-            await ctx.reply(
-                '📱 *Telefon raqamingizni tasdiqlang*\n\n' +
-                'Davom etish uchun telefon raqamingizni ulashing.\n' +
-                'Bu ma\'lumot sizning akkauntingizni himoya qilish uchun kerak.',
-                {
-                    parse_mode: 'Markdown',
-                    reply_markup: {
-                        keyboard: [[
-                            { text: '📞 Telefon raqamni yuborish', request_contact: true }
-                        ]],
-                        resize_keyboard: true,
-                        one_time_keyboard: true,
-                    },
+                const result = await this.authService.handleTelegramCallback({
+                    sessionId,
+                    telegramUserId,
+                    telegramUsername,
+                    displayName,
+                });
+
+                if (result.success && result.code) {
+                    await ctx.reply(
+                        '✅ *Tasdiqlash kodi:*\n\n' +
+                        `\`${result.code}\`\n\n` +
+                        '⚠️ Bu kodni veb saytdagi login sahifasiga kiriting.\n' +
+                        '⏰ Kod 5 daqiqa davomida amal qiladi.',
+                        { parse_mode: 'Markdown', reply_markup: { remove_keyboard: true } }
+                    );
+                } else {
+                    await ctx.reply('❌ Xatolik yuz berdi. Veb saytdan qaytadan urinib ko\'ring.');
                 }
-            );
+            } else {
+                // Yangi foydalanuvchi — telefon so'rash
+                this.userStates.set(telegramUserId, {
+                    sessionId,
+                    step: 'WAITING_PHONE',
+                    telegramUserId,
+                    telegramUsername,
+                    displayName,
+                });
+
+                await ctx.reply(
+                    '📱 *Telefon raqamingizni tasdiqlang*\n\n' +
+                    'Ro\'yxatdan o\'tish uchun telefon raqamingizni ulashing.',
+                    {
+                        parse_mode: 'Markdown',
+                        reply_markup: {
+                            keyboard: [[
+                                { text: '📞 Telefon raqamni yuborish', request_contact: true }
+                            ]],
+                            resize_keyboard: true,
+                            one_time_keyboard: true,
+                        },
+                    }
+                );
+            }
         } catch (error) {
             console.error('❌ Telegram bot start error:', error);
-            console.error('Error stack:', error.stack);
             await ctx.reply('❌ Tizimda xatolik yuz berdi. Iltimos, qaytadan urinib ko\'ring.');
         }
     }

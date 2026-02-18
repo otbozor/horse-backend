@@ -234,6 +234,10 @@ export class PaymentService {
         }
 
         // ✅ Complete payment
+        const isTopPackage =
+            payment.packageType === PaymentPackage.TEZKOR_SAVDO ||
+            payment.packageType === PaymentPackage.TURBO_SAVDO;
+
         if (payment.listingId) {
             await this.prisma.$transaction([
                 this.prisma.payment.update({
@@ -246,7 +250,7 @@ export class PaymentService {
                 }),
                 this.prisma.horseListing.update({
                     where: { id: payment.listingId },
-                    data: { isPaid: true, publishedAt: new Date() },
+                    data: { isPaid: true, isTop: isTopPackage, publishedAt: new Date() },
                 }),
             ]);
             console.log('✅ Listing payment completed:', payment.listingId);

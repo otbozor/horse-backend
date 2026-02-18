@@ -71,6 +71,7 @@ export class EventsService {
         regionId?: string;
         status?: EventStatus;
         upcoming?: boolean;
+        past?: boolean;
         allStatuses?: boolean;
     }) {
         const where: any = {};
@@ -88,9 +89,9 @@ export class EventsService {
         }
 
         if (filters?.upcoming) {
-            where.startsAt = {
-                gte: new Date(),
-            };
+            where.startsAt = { gte: new Date() };
+        } else if (filters?.past) {
+            where.startsAt = { lt: new Date() };
         }
 
         return this.prisma.event.findMany({
