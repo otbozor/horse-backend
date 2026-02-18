@@ -1,25 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import { InjectBot, Update, Start, Ctx, Help, On } from 'nestjs-telegraf';
-import { Telegraf, Context } from 'telegraf';
+import { Update, Start, Ctx, Help, On } from 'nestjs-telegraf';
+import { Context } from 'telegraf';
 import { AuthService } from '../auth/auth.service';
 import { PrismaService } from '../prisma/prisma.service';
-
-interface UserState {
-    sessionId: string;
-    step: 'WAITING_PHONE' | 'COMPLETED';
-    telegramUserId: number;
-    telegramUsername?: string;
-    displayName: string;
-}
 
 @Injectable()
 @Update()
 export class TelegramBotService {
-    // Store user states temporarily
-    private userStates = new Map<number, UserState>();
-
     constructor(
-        @InjectBot() private readonly bot: Telegraf<Context>,
         private readonly authService: AuthService,
         private readonly prisma: PrismaService,
     ) { }
@@ -31,7 +19,6 @@ export class TelegramBotService {
             : undefined;
 
         if (!startPayload) {
-            // Oddiy /start command - greeting
             await ctx.reply(
                 '🐴 *Otbozor platformasiga xush kelibsiz!*\n\n' +
                 'Login qilish uchun veb saytdan "Telegram orqali kirish" tugmasini bosing.',
@@ -40,7 +27,6 @@ export class TelegramBotService {
             return;
         }
 
-        // Session ID bilan /start - bu login jarayoni
         const sessionId = startPayload;
 
         try {
@@ -53,7 +39,6 @@ export class TelegramBotService {
                 return;
             }
 
-            // Mavjud foydalanuvchini tekshirish
             const existingUser = await this.prisma.user.findUnique({
                 where: { telegramUserId: BigInt(telegramUserId) },
             });
@@ -81,13 +66,21 @@ export class TelegramBotService {
                     await ctx.reply('❌ Xatolik yuz berdi. Veb saytdan qaytadan urinib ko\'ring.');
                 }
             } else {
-                // Yangi foydalanuvchi — telefon so'rash
-                this.userStates.set(telegramUserId, {
-                    sessionId,
-                    step: 'WAITING_PHONE',
-                    telegramUserId,
-                    telegramUsername,
-                    displayName,
+                // Yangi foydalanuvchi — holatni DB ga saqlash (restart safe)
+                const pendingId = `pending_phone:${telegramUserId}`;
+
+                // Eski pending holatni o'chirish
+                await this.prisma.telegramAuthSession.deleteMany({
+                    where: { id: pendingId },
+                });
+
+                await this.prisma.telegramAuthSession.create({
+                    data: {
+                        id: pendingId,
+                        type: 'PENDING_PHONE',
+                        data: JSON.stringify({ sessionId, telegramUsername, displayName }),
+                        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+                    },
                 });
 
                 await ctx.reply(
@@ -126,49 +119,48 @@ export class TelegramBotService {
                 return;
             }
 
-            // Check if user has pending state
-            const userState = this.userStates.get(telegramUserId);
-            if (!userState || userState.step !== 'WAITING_PHONE') {
+            // Holatni DB dan olish
+            const pendingId = `pending_phone:${telegramUserId}`;
+            const pendingSession = await this.prisma.telegramAuthSession.findUnique({
+                where: { id: pendingId },
+            });
+
+            if (!pendingSession || pendingSession.type !== 'PENDING_PHONE' || pendingSession.expiresAt < new Date()) {
+                if (pendingSession) {
+                    await this.prisma.telegramAuthSession.delete({ where: { id: pendingId } });
+                }
                 await ctx.reply(
-                    '❌ Login jarayoni topilmadi.\n\n' +
+                    '❌ Login jarayoni topilmadi yoki muddati o\'tdi.\n\n' +
                     'Iltimos, veb saytdan qaytadan "Telegram orqali kirish" tugmasini bosing.'
                 );
                 return;
             }
 
-            // Verify contact belongs to user
             if (contact.user_id !== telegramUserId) {
                 await ctx.reply('❌ Iltimos, o\'zingizning telefon raqamingizni yuboring.');
                 return;
             }
 
+            const { sessionId, telegramUsername, displayName } = JSON.parse(pendingSession.data);
             const phoneNumber = contact.phone_number;
-
-            // Format phone number (add + if missing)
             const formattedPhone = phoneNumber.startsWith('+') ? phoneNumber : `+${phoneNumber}`;
 
-            console.log('📱 Processing contact:', {
-                telegramUserId,
-                phone: formattedPhone,
-                sessionId: userState.sessionId
-            });
+            console.log('📱 Processing contact:', { telegramUserId, phone: formattedPhone, sessionId });
 
-            // Call backend callback to generate code
+            // Holatni DB dan o'chirish
+            await this.prisma.telegramAuthSession.delete({ where: { id: pendingId } });
+
             const result = await this.authService.handleTelegramCallback({
-                sessionId: userState.sessionId,
-                telegramUserId: userState.telegramUserId,
-                telegramUsername: userState.telegramUsername,
-                displayName: userState.displayName,
+                sessionId,
+                telegramUserId,
+                telegramUsername,
+                displayName,
                 phone: formattedPhone,
             });
 
             console.log('✅ Auth callback result:', result);
 
             if (result.success && result.code) {
-                // Update state
-                userState.step = 'COMPLETED';
-
-                // Send code to user
                 await ctx.reply(
                     '✅ *Tasdiqlash kodi:*\n\n' +
                     `\`${result.code}\`\n\n` +
@@ -179,11 +171,6 @@ export class TelegramBotService {
                         reply_markup: { remove_keyboard: true }
                     }
                 );
-
-                // Clean up state after 10 minutes
-                setTimeout(() => {
-                    this.userStates.delete(telegramUserId);
-                }, 10 * 60 * 1000);
             } else {
                 console.error('❌ Auth callback failed:', result.error);
                 await ctx.reply(
@@ -194,7 +181,6 @@ export class TelegramBotService {
             }
         } catch (error) {
             console.error('❌ Telegram bot contact error:', error);
-            console.error('Error stack:', error.stack);
             await ctx.reply(
                 '❌ Tizimda xatolik yuz berdi.\n\n' +
                 'Iltimos, qaytadan urinib ko\'ring yoki qo\'llab-quvvatlash xizmatiga murojaat qiling.'
