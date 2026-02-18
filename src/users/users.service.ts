@@ -72,6 +72,10 @@ export class UsersService {
         });
     }
 
+    async deleteAccount(id: string): Promise<void> {
+        await this.prisma.user.delete({ where: { id } });
+    }
+
     async hasPermission(userId: string, permissionKey: string): Promise<boolean> {
         const user = await this.getUserWithRoles(userId);
 

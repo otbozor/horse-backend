@@ -366,6 +366,28 @@ export class ListingsService {
         });
     }
 
+    async reactivateListing(userId: string, id: string): Promise<void> {
+        const listing = await this.prisma.horseListing.findUnique({ where: { id } });
+
+        if (!listing) throw new NotFoundException('Listing not found');
+        if (listing.userId !== userId) throw new ForbiddenException('Not your listing');
+        if (listing.status !== ListingStatus.EXPIRED) {
+            throw new ForbiddenException('Only expired listings can be reactivated');
+        }
+
+        const now = new Date();
+        const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+        await this.prisma.horseListing.update({
+            where: { id },
+            data: {
+                status: ListingStatus.APPROVED,
+                publishedAt: now,
+                expiresAt,
+            },
+        });
+    }
+
     // Favorites
     async addToFavorites(userId: string, listingId: string): Promise<void> {
         await this.prisma.favorite.create({

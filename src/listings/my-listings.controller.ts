@@ -103,6 +103,21 @@ export class MyListingsController {
         };
     }
 
+    @Post(':id/reactivate')
+    @ApiOperation({ summary: 'Reactivate expired listing' })
+    @ApiResponse({ status: 200, description: 'Listing reactivated for 30 days' })
+    async reactivateListing(
+        @CurrentUser() user: User,
+        @Param('id') id: string,
+    ) {
+        await this.listingsService.reactivateListing(user.id, id);
+        return {
+            success: true,
+            message: "E'lon qayta faollashtirildi",
+            timestamp: new Date().toISOString(),
+        };
+    }
+
     @Delete(':id')
     @ApiOperation({ summary: 'Archive listing' })
     @ApiResponse({ status: 200, description: 'Listing archived' })

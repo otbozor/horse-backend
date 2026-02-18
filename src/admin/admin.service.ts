@@ -148,11 +148,14 @@ export class AdminService {
     async approveListing(listingId: string, adminUserId: string) {
         await this.requireAdmin(adminUserId);
 
+        const now = new Date();
+        const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
         const listing = await this.prisma.horseListing.update({
             where: { id: listingId },
             data: {
                 status: ListingStatus.APPROVED,
-                publishedAt: new Date(),
+                publishedAt: now,
+                expiresAt,
             },
         });
 
