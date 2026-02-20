@@ -62,27 +62,29 @@ export class ListingsController {
     @Public()
     @ApiOperation({ summary: 'Get listing by ID or slug' })
     @ApiResponse({ status: 200, description: 'Returns listing details' })
-    async findById(@Param('id') idOrSlug: string, @Req() req: Request): Promise<ApiResponse<any>> {
-        // Try to find by ID first, then by slug
+    async findById(@Param('id') idOrSlug: string): Promise<ApiResponse<any>> {
         let listing = await this.listingsService.findById(idOrSlug).catch(() => null);
-
         if (!listing) {
             listing = await this.listingsService.findBySlug(idOrSlug);
         }
-
-        // Track view asynchronously
-        const user = req.user as User | undefined;
-        const sessionId = req.cookies?.sessionId;
-        this.listingsService.incrementViewCount(
-            listing.id,
-            user?.id,
-            sessionId,
-        ).catch(() => { });
-
         return {
             success: true,
             data: listing,
             message: 'Listing retrieved successfully',
+            timestamp: new Date().toISOString(),
+        };
+    }
+
+    @Post(':id/view')
+    @Public()
+    @ApiOperation({ summary: 'Track listing view (called from browser)' })
+    async trackView(@Param('id') id: string, @Req() req: Request): Promise<ApiResponse<null>> {
+        const user = req.user as User | undefined;
+        const sessionId = req.cookies?.sessionId;
+        this.listingsService.incrementViewCount(id, user?.id, sessionId).catch(() => { });
+        return {
+            success: true,
+            message: 'View tracked',
             timestamp: new Date().toISOString(),
         };
     }

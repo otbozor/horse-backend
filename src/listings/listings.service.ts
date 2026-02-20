@@ -48,23 +48,26 @@ export class ListingsService {
             ];
         }
 
-        // Sorting
-        const orderBy: Prisma.HorseListingOrderByWithRelationInput = {};
+        // Sorting — paid/top listings always first, then user-selected sort
+        const orderBy: Prisma.HorseListingOrderByWithRelationInput[] = [
+            { isPaid: 'desc' },
+            { isTop: 'desc' },
+        ];
         switch (filter.sort) {
             case 'price_asc':
-                orderBy.priceAmount = 'asc';
+                orderBy.push({ priceAmount: 'asc' });
                 break;
             case 'price_desc':
-                orderBy.priceAmount = 'desc';
+                orderBy.push({ priceAmount: 'desc' });
                 break;
             case 'oldest':
-                orderBy.publishedAt = 'asc';
+                orderBy.push({ publishedAt: 'asc' });
                 break;
             case 'views':
-                orderBy.viewCount = 'desc';
+                orderBy.push({ viewCount: 'desc' });
                 break;
             default:
-                orderBy.publishedAt = 'desc';
+                orderBy.push({ publishedAt: 'desc' });
         }
 
         // Pagination
@@ -200,6 +203,21 @@ export class ListingsService {
     }
 
     async incrementViewCount(id: string, userId?: string, sessionId?: string) {
+        // Logged-in user: count only once ever (no time limit)
+        if (userId) {
+            const existing = await this.prisma.viewLog.findFirst({
+                where: { listingId: id, userId },
+            });
+            if (existing) return;
+        } else if (sessionId) {
+            // Anonymous: count once per 24 hours per session
+            const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            const existing = await this.prisma.viewLog.findFirst({
+                where: { listingId: id, sessionId, createdAt: { gte: since } },
+            });
+            if (existing) return;
+        }
+
         // Log view
         await this.prisma.viewLog.create({
             data: {
@@ -366,26 +384,24 @@ export class ListingsService {
         });
     }
 
-    async reactivateListing(userId: string, id: string): Promise<void> {
-        const listing = await this.prisma.horseListing.findUnique({ where: { id } });
+    async deleteListing(userId: string, id: string): Promise<void> {
+        const listing = await this.prisma.horseListing.findUnique({
+            where: { id },
+        });
 
-        if (!listing) throw new NotFoundException('Listing not found');
-        if (listing.userId !== userId) throw new ForbiddenException('Not your listing');
-        if (listing.status !== ListingStatus.EXPIRED) {
-            throw new ForbiddenException('Only expired listings can be reactivated');
+        if (!listing) {
+            throw new NotFoundException('Listing not found');
         }
 
-        const now = new Date();
-        const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+        if (listing.userId !== userId) {
+            throw new ForbiddenException('You can only delete your own listings');
+        }
 
-        await this.prisma.horseListing.update({
-            where: { id },
-            data: {
-                status: ListingStatus.APPROVED,
-                publishedAt: now,
-                expiresAt,
-            },
-        });
+        if (listing.status !== ListingStatus.ARCHIVED) {
+            throw new ForbiddenException('Faqat nofaol (arxivlangan) e\'lonni o\'chirish mumkin');
+        }
+
+        await this.prisma.horseListing.delete({ where: { id } });
     }
 
     // Favorites

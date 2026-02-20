@@ -1,10 +1,11 @@
-import { Controller, Get, Post, Param, Query, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, Body, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
 import { ProductsService } from './products.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from '@prisma/client';
 import { UserCreateProductDto } from './dto/user-create-product.dto';
+import { Request } from 'express';
 
 @ApiTags('Products')
 @Controller('products')
@@ -74,7 +75,9 @@ export class ProductsController {
     @ApiOperation({ summary: 'Mahsulotni slug bo\'yicha olish' })
     @ApiResponse({ status: 200, description: 'Mahsulot ma\'lumotlari' })
     @ApiResponse({ status: 404, description: 'Mahsulot topilmadi' })
-    async findBySlug(@Param('slug') slug: string) {
-        return this.productsService.findBySlug(slug);
+    async findBySlug(@Param('slug') slug: string, @Req() req: Request) {
+        const user = req.user as User | undefined;
+        const sessionId = req.cookies?.sessionId;
+        return this.productsService.findBySlug(slug, user?.id, sessionId);
     }
 }

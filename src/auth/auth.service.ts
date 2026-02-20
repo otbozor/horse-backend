@@ -3,7 +3,6 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
-import { UsersService } from '../users/users.service';
 import { TelegramAuthDto, TelegramCallbackDto, AdminLoginDto } from './dto/auth.dto';
 import { v4 as uuidv4 } from 'uuid';
 import * as bcrypt from 'bcrypt';
@@ -26,7 +25,6 @@ export class AuthService {
         private prisma: PrismaService,
         private jwtService: JwtService,
         private configService: ConfigService,
-        private usersService: UsersService,
     ) { }
 
     // Admin login with username/password
@@ -232,7 +230,7 @@ export class AuthService {
             data: {
                 userId,
                 token: refreshToken,
-                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+                expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
             },
         });
 
@@ -258,7 +256,7 @@ export class AuthService {
             data: {
                 userId,
                 token: refreshToken,
-                expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+                expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
             },
         });
 
@@ -316,13 +314,13 @@ export class AuthService {
 
         res.cookie('accessToken', tokens.accessToken, {
             ...cookieOptions,
-            maxAge: 15 * 60 * 1000,
+            maxAge: 7 * 24 * 60 * 60 * 1000,   // 7 kun
             path: '/',
         });
 
         res.cookie('refreshToken', tokens.refreshToken, {
             ...cookieOptions,
-            maxAge: 7 * 24 * 60 * 60 * 1000,
+            maxAge: 30 * 24 * 60 * 60 * 1000,  // 30 kun
             path: '/',
         });
 

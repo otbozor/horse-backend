@@ -16,6 +16,26 @@ export class PaymentController {
         private readonly prisma: PrismaService,
     ) { }
 
+    @Get('reactivation-price')
+    @Public()
+    @ApiOperation({ summary: 'Get listing reactivation price (public)' })
+    async getReactivationPrice() {
+        const amount = await this.paymentService.getReactivationPrice();
+        return { success: true, data: { amount } };
+    }
+
+    @Post('create-reactivation-invoice')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Create reactivation invoice for EXPIRED listing' })
+    async createReactivationInvoice(
+        @Body() body: { listingId: string },
+        @CurrentUser() user: User,
+    ) {
+        const result = await this.paymentService.createReactivationInvoice(user.id, body.listingId);
+        return { success: true, data: result };
+    }
+
     @Get('product-price')
     @Public()
     @ApiOperation({ summary: 'Get product listing price (public)' })
@@ -26,6 +46,19 @@ export class PaymentController {
         return {
             success: true,
             data: { productListingPrice: setting ? Number(setting.value) : 35000 },
+        };
+    }
+
+    @Get('packages')
+    @Public()
+    @ApiOperation({ summary: 'Get listing package prices with discounts (public)' })
+    async getPackages() {
+        const OSON_START = await this.paymentService.getPackagePrice('OSON_START');
+        const TEZKOR_SAVDO = await this.paymentService.getPackagePrice('TEZKOR_SAVDO');
+        const TURBO_SAVDO = await this.paymentService.getPackagePrice('TURBO_SAVDO');
+        return {
+            success: true,
+            data: { OSON_START, TEZKOR_SAVDO, TURBO_SAVDO },
         };
     }
 

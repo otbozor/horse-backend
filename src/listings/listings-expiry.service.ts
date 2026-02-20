@@ -15,15 +15,30 @@ export class ListingsExpiryService implements OnModuleInit {
 
     async expireListings() {
         try {
+            const now = new Date();
+
+            // 1. E'lon 30 kunlik muddati tugasa → EXPIRED
             const result = await this.prisma.horseListing.updateMany({
                 where: {
                     status: 'APPROVED',
-                    expiresAt: { lt: new Date() },
+                    expiresAt: { lt: now },
                 },
                 data: { status: 'EXPIRED' },
             });
             if (result.count > 0) {
                 this.logger.log(`⏰ ${result.count} ta e'lon muddati tugadi (EXPIRED)`);
+            }
+
+            // 2. Boost muddati tugasa → isPaid va isTop ni reset qilish
+            const boostResult = await this.prisma.horseListing.updateMany({
+                where: {
+                    isPaid: true,
+                    boostExpiresAt: { lt: now },
+                },
+                data: { isPaid: false, isTop: false, boostExpiresAt: null },
+            });
+            if (boostResult.count > 0) {
+                this.logger.log(`📦 ${boostResult.count} ta e'lon reklamasi muddati tugadi`);
             }
         } catch (err) {
             this.logger.error('expireListings error:', err);

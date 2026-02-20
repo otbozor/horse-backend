@@ -20,36 +20,98 @@ export class AdminFinanceController {
     @ApiOperation({ summary: 'Get finance settings' })
     async getSettings(@CurrentUser() user: User) {
         await this.adminService.requireAdmin(user.id);
-        const setting = await this.prisma.appSetting.findUnique({
-            where: { key: 'product_listing_price' },
-        });
+
+        const keys = [
+            'product_listing_price',
+            'listing_reactivation_price',
+            'listing_oson_start_price', 'listing_oson_start_discount',
+            'listing_tezkor_savdo_price', 'listing_tezkor_savdo_discount',
+            'listing_turbo_savdo_price', 'listing_turbo_savdo_discount',
+        ];
+        const settings = await this.prisma.appSetting.findMany({ where: { key: { in: keys } } });
+        const map: Record<string, string> = {};
+        settings.forEach(s => { map[s.key] = s.value; });
+
         return {
             success: true,
             data: {
-                productListingPrice: setting ? Number(setting.value) : 35000,
+                productListingPrice: Number(map['product_listing_price'] || 35000),
+                reactivationPrice: Number(map['listing_reactivation_price'] || 50000),
+                listingPackages: {
+                    OSON_START: {
+                        price: Number(map['listing_oson_start_price'] || 41600),
+                        discountPrice: map['listing_oson_start_discount'] ? Number(map['listing_oson_start_discount']) : null,
+                    },
+                    TEZKOR_SAVDO: {
+                        price: Number(map['listing_tezkor_savdo_price'] || 85700),
+                        discountPrice: map['listing_tezkor_savdo_discount'] ? Number(map['listing_tezkor_savdo_discount']) : null,
+                    },
+                    TURBO_SAVDO: {
+                        price: Number(map['listing_turbo_savdo_price'] || 249300),
+                        discountPrice: map['listing_turbo_savdo_discount'] ? Number(map['listing_turbo_savdo_discount']) : null,
+                    },
+                },
             },
         };
     }
 
     @Put('settings')
     @ApiOperation({ summary: 'Update finance settings' })
-    async updateSettings(@CurrentUser() user: User, @Body() body: { productListingPrice: number }) {
+    async updateSettings(
+        @CurrentUser() user: User,
+        @Body() body: {
+            productListingPrice?: number;
+            reactivationPrice?: number;
+            listingPackages?: {
+                OSON_START?: { price?: number; discountPrice?: number | null };
+                TEZKOR_SAVDO?: { price?: number; discountPrice?: number | null };
+                TURBO_SAVDO?: { price?: number; discountPrice?: number | null };
+            };
+        },
+    ) {
         await this.adminService.requireAdmin(user.id);
-        const price = Number(body.productListingPrice);
-        if (!price || price <= 0) {
-            return { success: false, message: 'Noto\'g\'ri narx' };
+
+        const upserts: Promise<any>[] = [];
+
+        const upsert = (key: string, value: string) =>
+            this.prisma.appSetting.upsert({
+                where: { key },
+                update: { value },
+                create: { key, value },
+            });
+
+        if (body.productListingPrice && body.productListingPrice > 0) {
+            upserts.push(upsert('product_listing_price', String(body.productListingPrice)));
         }
 
-        await this.prisma.appSetting.upsert({
-            where: { key: 'product_listing_price' },
-            update: { value: String(price) },
-            create: { key: 'product_listing_price', value: String(price) },
-        });
+        if (body.reactivationPrice && body.reactivationPrice > 0) {
+            upserts.push(upsert('listing_reactivation_price', String(body.reactivationPrice)));
+        }
 
-        return {
-            success: true,
-            data: { productListingPrice: price },
+        const pkgMap: Record<string, string> = {
+            OSON_START: 'oson_start',
+            TEZKOR_SAVDO: 'tezkor_savdo',
+            TURBO_SAVDO: 'turbo_savdo',
         };
+
+        for (const [pkg, slug] of Object.entries(pkgMap)) {
+            const data = body.listingPackages?.[pkg as keyof typeof body.listingPackages];
+            if (!data) continue;
+            if (data.price && data.price > 0) {
+                upserts.push(upsert(`listing_${slug}_price`, String(data.price)));
+            }
+            if (data.discountPrice !== undefined) {
+                if (data.discountPrice === null || data.discountPrice === 0) {
+                    // Remove discount
+                    upserts.push(this.prisma.appSetting.deleteMany({ where: { key: `listing_${slug}_discount` } }));
+                } else {
+                    upserts.push(upsert(`listing_${slug}_discount`, String(data.discountPrice)));
+                }
+            }
+        }
+
+        await Promise.all(upserts);
+        return { success: true };
     }
 
     @Get('payments')

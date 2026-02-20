@@ -4,10 +4,16 @@ import { PrismaService } from '../prisma/prisma.service';
 import { PaymentStatus, PaymentPackage, ListingStatus, ProductStatus } from '@prisma/client';
 import * as crypto from 'crypto';
 
-const PACKAGES = {
+const PACKAGE_DEFAULTS = {
     OSON_START: { amount: 41600, durationDays: 3 },
     TEZKOR_SAVDO: { amount: 85700, durationDays: 7 },
     TURBO_SAVDO: { amount: 249300, durationDays: 30 },
+};
+
+const PACKAGE_SLUGS: Record<string, string> = {
+    OSON_START: 'oson_start',
+    TEZKOR_SAVDO: 'tezkor_savdo',
+    TURBO_SAVDO: 'turbo_savdo',
 };
 
 @Injectable()
@@ -27,6 +33,71 @@ export class PaymentService {
         this.frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://otbozor.uz';
     }
 
+    // Get package price: uses discount if set, otherwise original price from DB, fallback to hardcoded default
+    async getPackagePrice(packageType: string): Promise<{ amount: number; originalAmount: number; hasDiscount: boolean }> {
+        const slug = PACKAGE_SLUGS[packageType];
+        const defaults = PACKAGE_DEFAULTS[packageType as keyof typeof PACKAGE_DEFAULTS];
+        if (!slug || !defaults) throw new BadRequestException('Noto\'g\'ri tarif');
+
+        const settings = await this.prisma.appSetting.findMany({
+            where: { key: { in: [`listing_${slug}_price`, `listing_${slug}_discount`] } },
+        });
+        const map: Record<string, string> = {};
+        settings.forEach(s => { map[s.key] = s.value; });
+
+        const originalAmount = map[`listing_${slug}_price`] ? Number(map[`listing_${slug}_price`]) : defaults.amount;
+        const discountAmount = map[`listing_${slug}_discount`] ? Number(map[`listing_${slug}_discount`]) : null;
+
+        return {
+            amount: discountAmount ?? originalAmount,
+            originalAmount,
+            hasDiscount: discountAmount !== null && discountAmount < originalAmount,
+        };
+    }
+
+    // Get reactivation price from settings
+    async getReactivationPrice(): Promise<number> {
+        const setting = await this.prisma.appSetting.findUnique({
+            where: { key: 'listing_reactivation_price' },
+        });
+        return setting ? Number(setting.value) : 50000;
+    }
+
+    // Create reactivation invoice for EXPIRED listings
+    async createReactivationInvoice(userId: string, listingId: string) {
+        const listing = await this.prisma.horseListing.findUnique({ where: { id: listingId } });
+
+        if (!listing) throw new NotFoundException('Listing not found');
+        if (listing.userId !== userId) throw new BadRequestException('Not your listing');
+        if (listing.status !== ListingStatus.EXPIRED) {
+            throw new BadRequestException("Faqat muddati tugagan e'lonni faollashtirish mumkin");
+        }
+
+        const amount = await this.getReactivationPrice();
+
+        const payment = await this.prisma.payment.create({
+            data: {
+                listingId,
+                userId,
+                amount,
+                // packageType intentionally null — marks this as reactivation, not a boost
+                status: PaymentStatus.PENDING,
+                merchantPrepareId: Math.floor(Math.random() * 2000000000) + 1,
+            },
+        });
+
+        const returnUrl = `${this.frontendUrl}/elon/${listingId}/tolov/natija?paymentId=${payment.id}`;
+        const clickUrl =
+            `https://my.click.uz/services/pay` +
+            `?service_id=${this.serviceId}` +
+            `&merchant_id=${this.merchantId}` +
+            `&amount=${amount}` +
+            `&transaction_param=${payment.id}` +
+            `&return_url=${encodeURIComponent(returnUrl)}`;
+
+        return { paymentId: payment.id, amount, clickUrl };
+    }
+
     // Create invoice and return Click payment URL
     async createInvoice(userId: string, listingId: string, packageType: PaymentPackage) {
         const listing = await this.prisma.horseListing.findUnique({ where: { id: listingId } });
@@ -36,10 +107,14 @@ export class PaymentService {
         if (listing.status !== ListingStatus.APPROVED) {
             throw new BadRequestException("E'lon tasdiqlangandan keyin to'lov qilish mumkin");
         }
-        if (listing.isPaid) throw new BadRequestException("E'lon allaqachon to'langan");
+        if (listing.isPaid && listing.boostExpiresAt && listing.boostExpiresAt > new Date()) {
+            throw new BadRequestException("E'lon allaqachon faol reklama paketiga ega");
+        }
 
-        const pkg = PACKAGES[packageType];
-        if (!pkg) throw new BadRequestException('Noto\'g\'ri tarif');
+        const defaults = PACKAGE_DEFAULTS[packageType];
+        if (!defaults) throw new BadRequestException('Noto\'g\'ri tarif');
+
+        const { amount } = await this.getPackagePrice(packageType);
 
         // Create payment record
         const payment = await this.prisma.payment.create({
@@ -47,7 +122,7 @@ export class PaymentService {
                 listingId,
                 userId,
                 packageType,
-                amount: pkg.amount,
+                amount,
                 status: PaymentStatus.PENDING,
                 merchantPrepareId: Math.floor(Math.random() * 2000000000) + 1,
             },
@@ -60,13 +135,13 @@ export class PaymentService {
             `https://my.click.uz/services/pay` +
             `?service_id=${this.serviceId}` +
             `&merchant_id=${this.merchantId}` +
-            `&amount=${pkg.amount}` +
+            `&amount=${amount}` +
             `&transaction_param=${payment.id}` +
             `&return_url=${encodeURIComponent(returnUrl)}`;
 
         return {
             paymentId: payment.id,
-            amount: pkg.amount,
+            amount,
             clickUrl,
         };
     }
@@ -234,7 +309,10 @@ export class PaymentService {
         }
 
         // ✅ Complete payment
-        if (payment.listingId) {
+        if (payment.listingId && payment.packageType) {
+            // Boost payment (OSON_START / TEZKOR_SAVDO / TURBO_SAVDO)
+            const pkgDefaults = PACKAGE_DEFAULTS[payment.packageType as keyof typeof PACKAGE_DEFAULTS];
+            const boostExpiresAt = new Date(Date.now() + (pkgDefaults?.durationDays ?? 7) * 24 * 60 * 60 * 1000);
             await this.prisma.$transaction([
                 this.prisma.payment.update({
                     where: { id: merchant_trans_id },
@@ -246,10 +324,27 @@ export class PaymentService {
                 }),
                 this.prisma.horseListing.update({
                     where: { id: payment.listingId },
-                    data: { isPaid: true, isTop: true, publishedAt: new Date() },
+                    data: { isPaid: true, isTop: true, publishedAt: new Date(), boostExpiresAt },
                 }),
             ]);
-            console.log('✅ Listing payment completed:', payment.listingId);
+            console.log('✅ Listing boost payment completed:', payment.listingId);
+        } else if (payment.listingId && !payment.packageType) {
+            // Reactivation payment — send to PENDING for admin review
+            await this.prisma.$transaction([
+                this.prisma.payment.update({
+                    where: { id: merchant_trans_id },
+                    data: {
+                        status: PaymentStatus.COMPLETED,
+                        clickTransId: click_trans_id,
+                        clickPaydocId: click_paydoc_id,
+                    },
+                }),
+                this.prisma.horseListing.update({
+                    where: { id: payment.listingId },
+                    data: { status: ListingStatus.PENDING },
+                }),
+            ]);
+            console.log('✅ Listing reactivation payment completed:', payment.listingId);
         } else if (payment.productId) {
             await this.prisma.$transaction([
                 this.prisma.payment.update({

@@ -103,21 +103,6 @@ export class MyListingsController {
         };
     }
 
-    @Post(':id/reactivate')
-    @ApiOperation({ summary: 'Reactivate expired listing' })
-    @ApiResponse({ status: 200, description: 'Listing reactivated for 30 days' })
-    async reactivateListing(
-        @CurrentUser() user: User,
-        @Param('id') id: string,
-    ) {
-        await this.listingsService.reactivateListing(user.id, id);
-        return {
-            success: true,
-            message: "E'lon qayta faollashtirildi",
-            timestamp: new Date().toISOString(),
-        };
-    }
-
     @Delete(':id')
     @ApiOperation({ summary: 'Archive listing' })
     @ApiResponse({ status: 200, description: 'Listing archived' })
@@ -126,6 +111,17 @@ export class MyListingsController {
         @Param('id') id: string,
     ) {
         await this.listingsService.archiveListing(user.id, id);
+        return { success: true };
+    }
+
+    @Delete(':id/permanent')
+    @ApiOperation({ summary: 'Permanently delete archived listing' })
+    @ApiResponse({ status: 200, description: 'Listing deleted' })
+    async deleteListing(
+        @CurrentUser() user: User,
+        @Param('id') id: string,
+    ) {
+        await this.listingsService.deleteListing(user.id, id);
         return { success: true };
     }
 }

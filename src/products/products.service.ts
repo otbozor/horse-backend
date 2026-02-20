@@ -7,6 +7,32 @@ import { UserCreateProductDto } from './dto/user-create-product.dto';
 export class ProductsService {
     constructor(private prisma: PrismaService) { }
 
+    // In-memory deduplication for anonymous sessions (24h window)
+    private readonly sessionViewCache = new Map<string, number>();
+    // In-memory deduplication for logged-in users (permanent per server run)
+    private readonly userViewCache = new Set<string>();
+
+    private hasUserViewed(productId: string, userId: string): boolean {
+        return this.userViewCache.has(`${productId}:${userId}`);
+    }
+
+    private recordUserView(productId: string, userId: string) {
+        this.userViewCache.add(`${productId}:${userId}`);
+    }
+
+    private hasRecentSessionView(productId: string, sessionId: string): boolean {
+        const key = `${productId}:${sessionId}`;
+        const last = this.sessionViewCache.get(key);
+        if (!last) return false;
+        if (Date.now() - last < 24 * 60 * 60 * 1000) return true;
+        this.sessionViewCache.delete(key);
+        return false;
+    }
+
+    private recordSessionView(productId: string, sessionId: string) {
+        this.sessionViewCache.set(`${productId}:${sessionId}`, Date.now());
+    }
+
     async findAll(options?: {
         categoryId?: string;
         priceMin?: number;
@@ -70,7 +96,7 @@ export class ProductsService {
         };
     }
 
-    async findBySlug(slug: string) {
+    async findBySlug(slug: string, userId?: string, sessionId?: string) {
         const product = await this.prisma.product.findUnique({
             where: { slug },
             include: {
@@ -85,7 +111,17 @@ export class ProductsService {
             throw new NotFoundException('Mahsulot topilmadi');
         }
 
-        // Increment view count
+        // Increment view count with deduplication
+        // Logged-in user: count only once ever
+        if (userId) {
+            if (this.hasUserViewed(product.id, userId)) return product;
+            this.recordUserView(product.id, userId);
+        } else if (sessionId) {
+            // Anonymous: count once per 24 hours
+            if (this.hasRecentSessionView(product.id, sessionId)) return product;
+            this.recordSessionView(product.id, sessionId);
+        }
+
         await this.prisma.product.update({
             where: { id: product.id },
             data: { viewCount: { increment: 1 } },
