@@ -96,7 +96,7 @@ export class ProductsService {
         };
     }
 
-    async findBySlug(slug: string, userId?: string, sessionId?: string) {
+    async findBySlug(slug: string) {
         const product = await this.prisma.product.findUnique({
             where: { slug },
             include: {
@@ -111,14 +111,24 @@ export class ProductsService {
             throw new NotFoundException('Mahsulot topilmadi');
         }
 
-        // Increment view count with deduplication
+        return product;
+    }
+
+    async incrementViewCount(slug: string, userId?: string, sessionId?: string) {
+        const product = await this.prisma.product.findUnique({
+            where: { slug },
+            select: { id: true, status: true },
+        });
+
+        if (!product || product.status !== ProductStatus.PUBLISHED) return;
+
         // Logged-in user: count only once ever
         if (userId) {
-            if (this.hasUserViewed(product.id, userId)) return product;
+            if (this.hasUserViewed(product.id, userId)) return;
             this.recordUserView(product.id, userId);
         } else if (sessionId) {
             // Anonymous: count once per 24 hours
-            if (this.hasRecentSessionView(product.id, sessionId)) return product;
+            if (this.hasRecentSessionView(product.id, sessionId)) return;
             this.recordSessionView(product.id, sessionId);
         }
 
@@ -126,8 +136,6 @@ export class ProductsService {
             where: { id: product.id },
             data: { viewCount: { increment: 1 } },
         });
-
-        return product;
     }
 
     async getCategories() {

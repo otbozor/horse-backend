@@ -75,9 +75,16 @@ export class ProductsController {
     @ApiOperation({ summary: 'Mahsulotni slug bo\'yicha olish' })
     @ApiResponse({ status: 200, description: 'Mahsulot ma\'lumotlari' })
     @ApiResponse({ status: 404, description: 'Mahsulot topilmadi' })
-    async findBySlug(@Param('slug') slug: string, @Req() req: Request) {
+    async findBySlug(@Param('slug') slug: string) {
+        return this.productsService.findBySlug(slug);
+    }
+
+    @Post(':slug/view')
+    @ApiOperation({ summary: 'Mahsulot ko\'rishini hisoblash (browserdan chaqiriladi)' })
+    async trackView(@Param('slug') slug: string, @Req() req: Request) {
         const user = req.user as User | undefined;
         const sessionId = req.cookies?.sessionId;
-        return this.productsService.findBySlug(slug, user?.id, sessionId);
+        this.productsService.incrementViewCount(slug, user?.id, sessionId).catch(() => { });
+        return { success: true };
     }
 }

@@ -359,8 +359,7 @@ export class PaymentService {
                     where: { id: payment.productId },
                     data: {
                         isPaid: true,
-                        status: ProductStatus.PUBLISHED,
-                        publishedAt: new Date(),
+                        // status stays DRAFT — admin must approve before publishing
                     },
                 }),
             ]);
