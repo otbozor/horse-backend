@@ -35,7 +35,7 @@ export class ListingsExpiryService implements OnModuleInit {
                     isPaid: true,
                     boostExpiresAt: { lt: now },
                 },
-                data: { isPaid: false, isTop: false, boostExpiresAt: null },
+                data: { isPaid: false, isTop: false, isPremium: false, boostExpiresAt: null },
             });
             if (boostResult.count > 0) {
                 this.logger.log(`📦 ${boostResult.count} ta e'lon reklamasi muddati tugadi`);

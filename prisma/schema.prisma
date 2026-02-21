@@ -37,6 +37,8 @@ model User {
   isVerified       Boolean    @default(false) @map("is_verified")
   status           UserStatus @default(ACTIVE)
   
+  listingCredits   Int        @default(3) @map("listing_credits")
+
   createdAt        DateTime   @default(now()) @map("created_at")
   updatedAt        DateTime   @updatedAt @map("updated_at")
   lastLoginAt      DateTime?  @map("last_login_at")
@@ -176,6 +178,7 @@ model HorseListing {
   status        ListingStatus @default(DRAFT)
   isPaid        Boolean       @default(false) @map("is_paid")
   isTop         Boolean       @default(false) @map("is_top")
+  isPremium     Boolean       @default(false) @map("is_premium")
   rejectReason  String?       @map("reject_reason")
   
   viewCount     Int           @default(0) @map("view_count")
@@ -436,6 +439,7 @@ model Payment {
   productId           String?         @map("product_id")
   userId              String          @map("user_id")
   packageType         PaymentPackage? @map("package_type")
+  listingBundleSize   Int?            @map("listing_bundle_size")
   amount              Decimal         @map("amount") @db.Decimal(15, 2)
   status              PaymentStatus   @default(PENDING)
 

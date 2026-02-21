@@ -36,6 +36,14 @@ export class PaymentController {
         return { success: true, data: result };
     }
 
+    @Get('listing-bundles')
+    @Public()
+    @ApiOperation({ summary: 'Get listing bundle prices (public)' })
+    async getListingBundlePrices() {
+        const data = await this.paymentService.getListingBundlePrices();
+        return { success: true, data };
+    }
+
     @Get('product-price')
     @Public()
     @ApiOperation({ summary: 'Get product listing price (public)' })
@@ -96,6 +104,18 @@ export class PaymentController {
     async getStatus(@Param('id') id: string, @CurrentUser() user: User) {
         const data = await this.paymentService.getPaymentStatus(id, user.id);
         return { success: true, data };
+    }
+
+    @Post('create-listing-bundle-invoice')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Create listing credits bundle invoice' })
+    async createListingBundleInvoice(
+        @Body() body: { listingId: string; bundleSize: 5 | 10 | 20 },
+        @CurrentUser() user: User,
+    ) {
+        const result = await this.paymentService.createListingBundleInvoice(user.id, body.listingId, body.bundleSize);
+        return { success: true, data: result };
     }
 
     @Post('create-product-invoice')

@@ -69,6 +69,7 @@ interface UserMeResponse {
     isVerified: boolean;
     phone?: string;
     isAdmin: boolean;
+    listingCredits: number;
 }
 
 @ApiTags('Autentifikatsiya')
@@ -411,6 +412,7 @@ export class AuthController {
                 isVerified: user.isVerified,
                 phone: user.phone ? `${user.phone.substring(0, 4)}****` : undefined,
                 isAdmin: user.isAdmin,
+                listingCredits: user.listingCredits,
             },
             message: 'User information retrieved successfully',
             timestamp: new Date().toISOString(),

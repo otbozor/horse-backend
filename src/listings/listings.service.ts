@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, HttpException, HttpStatus } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma, ListingStatus, HorseListing } from '@prisma/client';
 import slugify from 'slugify';
@@ -314,13 +314,35 @@ export class ListingsService {
             throw new ForbiddenException('At least one image is required');
         }
 
-        return this.prisma.horseListing.update({
-            where: { id },
-            data: {
-                status: ListingStatus.PENDING,
-                hasVideo: listing.media.some((m) => m.type === 'VIDEO'),
-            },
+        // Listing credits check
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { listingCredits: true },
         });
+
+        if (!user || user.listingCredits <= 0) {
+            throw new HttpException(
+                { requiresPayment: true, listingId: id },
+                HttpStatus.PAYMENT_REQUIRED,
+            );
+        }
+
+        // Decrement 1 credit and submit in transaction
+        await this.prisma.$transaction([
+            this.prisma.user.update({
+                where: { id: userId },
+                data: { listingCredits: { decrement: 1 } },
+            }),
+            this.prisma.horseListing.update({
+                where: { id },
+                data: {
+                    status: ListingStatus.PENDING,
+                    hasVideo: listing.media.some((m) => m.type === 'VIDEO'),
+                },
+            }),
+        ]);
+
+        return this.prisma.horseListing.findUnique({ where: { id } }) as Promise<HorseListing>;
     }
 
     async getMyListingById(userId: string, id: string) {
@@ -458,7 +480,7 @@ export class ListingsService {
     // Featured listings for homepage
     async getFeatured(limit = 12) {
         return this.prisma.horseListing.findMany({
-            where: { status: ListingStatus.APPROVED, isPaid: true },
+            where: { status: ListingStatus.APPROVED, isPremium: true },
             orderBy: [{ viewCount: 'desc' }, { publishedAt: 'desc' }],
             take: limit,
             include: {

@@ -146,6 +146,56 @@ export class PaymentService {
         };
     }
 
+    // Get listing bundle prices from AppSettings
+    async getListingBundlePrices(): Promise<{ bundle5: number; bundle10: number; bundle20: number }> {
+        const settings = await this.prisma.appSetting.findMany({
+            where: { key: { in: ['listing_bundle_5_price', 'listing_bundle_10_price', 'listing_bundle_20_price'] } },
+        });
+        const map: Record<string, number> = {};
+        settings.forEach(s => { map[s.key] = Number(s.value); });
+        return {
+            bundle5: map['listing_bundle_5_price'] ?? 50000,
+            bundle10: map['listing_bundle_10_price'] ?? 90000,
+            bundle20: map['listing_bundle_20_price'] ?? 160000,
+        };
+    }
+
+    // Create invoice for listing credits bundle purchase
+    async createListingBundleInvoice(userId: string, listingId: string, bundleSize: 5 | 10 | 20) {
+        const listing = await this.prisma.horseListing.findUnique({ where: { id: listingId } });
+
+        if (!listing) throw new NotFoundException('E\'lon topilmadi');
+        if (listing.userId !== userId) throw new BadRequestException('Bu sizning e\'loningiz emas');
+        if (listing.status !== 'DRAFT') throw new BadRequestException('Faqat qoralama e\'lonlar uchun to\'lov qilish mumkin');
+
+        const prices = await this.getListingBundlePrices();
+        const amountMap: Record<number, number> = { 5: prices.bundle5, 10: prices.bundle10, 20: prices.bundle20 };
+        const amount = amountMap[bundleSize];
+        if (!amount) throw new BadRequestException('Noto\'g\'ri paket hajmi');
+
+        const payment = await this.prisma.payment.create({
+            data: {
+                listingId,
+                userId,
+                amount,
+                listingBundleSize: bundleSize,
+                status: PaymentStatus.PENDING,
+                merchantPrepareId: Math.floor(Math.random() * 2000000000) + 1,
+            },
+        });
+
+        const returnUrl = `${this.frontendUrl}/elon/${listingId}/nashr-tolov/natija?paymentId=${payment.id}`;
+        const clickUrl =
+            `https://my.click.uz/services/pay` +
+            `?service_id=${this.serviceId}` +
+            `&merchant_id=${this.merchantId}` +
+            `&amount=${amount}` +
+            `&transaction_param=${payment.id}` +
+            `&return_url=${encodeURIComponent(returnUrl)}`;
+
+        return { paymentId: payment.id, amount, clickUrl };
+    }
+
     // Create invoice for product listing
     async createProductInvoice(userId: string, productId: string) {
         const product = await this.prisma.product.findUnique({ where: { id: productId } });
@@ -309,10 +359,37 @@ export class PaymentService {
         }
 
         // ✅ Complete payment
-        if (payment.listingId && payment.packageType) {
+        if (payment.listingBundleSize && payment.listingId) {
+            // Listing credits bundle purchase — add credits to user + auto-submit listing
+            const bundleSize = payment.listingBundleSize;
+            await this.prisma.$transaction([
+                this.prisma.payment.update({
+                    where: { id: merchant_trans_id },
+                    data: {
+                        status: PaymentStatus.COMPLETED,
+                        clickTransId: click_trans_id,
+                        clickPaydocId: click_paydoc_id,
+                    },
+                }),
+                // Add bundle credits to user (bundleSize - 1 because 1 will be used immediately)
+                this.prisma.user.update({
+                    where: { id: payment.userId },
+                    data: { listingCredits: { increment: bundleSize - 1 } },
+                }),
+                // Auto-submit the listing that triggered the purchase
+                this.prisma.horseListing.update({
+                    where: { id: payment.listingId },
+                    data: {
+                        status: ListingStatus.PENDING,
+                    },
+                }),
+            ]);
+            console.log(`✅ Listing bundle (${bundleSize}) payment completed, listing auto-submitted:`, payment.listingId);
+        } else if (payment.listingId && payment.packageType) {
             // Boost payment (OSON_START / TEZKOR_SAVDO / TURBO_SAVDO)
             const pkgDefaults = PACKAGE_DEFAULTS[payment.packageType as keyof typeof PACKAGE_DEFAULTS];
             const boostExpiresAt = new Date(Date.now() + (pkgDefaults?.durationDays ?? 7) * 24 * 60 * 60 * 1000);
+            const isPremium = payment.packageType === PaymentPackage.TURBO_SAVDO;
             await this.prisma.$transaction([
                 this.prisma.payment.update({
                     where: { id: merchant_trans_id },
@@ -324,12 +401,21 @@ export class PaymentService {
                 }),
                 this.prisma.horseListing.update({
                     where: { id: payment.listingId },
-                    data: { isPaid: true, isTop: true, publishedAt: new Date(), boostExpiresAt },
+                    data: { isPaid: true, isTop: true, isPremium, publishedAt: new Date(), boostExpiresAt },
                 }),
             ]);
             console.log('✅ Listing boost payment completed:', payment.listingId);
         } else if (payment.listingId && !payment.packageType) {
-            // Reactivation payment — send to PENDING for admin review
+            // Reactivation (EXPIRED) or Publication fee (DRAFT) — both send to PENDING
+            const listingForUpdate = await this.prisma.horseListing.findUnique({
+                where: { id: payment.listingId },
+                select: { status: true },
+            });
+            const updateData: any = { status: ListingStatus.PENDING };
+            if (listingForUpdate?.status === 'DRAFT') {
+                // Publication fee — mark as paid
+                updateData.isPaid = true;
+            }
             await this.prisma.$transaction([
                 this.prisma.payment.update({
                     where: { id: merchant_trans_id },
@@ -341,10 +427,10 @@ export class PaymentService {
                 }),
                 this.prisma.horseListing.update({
                     where: { id: payment.listingId },
-                    data: { status: ListingStatus.PENDING },
+                    data: updateData,
                 }),
             ]);
-            console.log('✅ Listing reactivation payment completed:', payment.listingId);
+            console.log('✅ Listing publication/reactivation payment completed:', payment.listingId);
         } else if (payment.productId) {
             await this.prisma.$transaction([
                 this.prisma.payment.update({

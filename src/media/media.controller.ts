@@ -58,16 +58,24 @@ export class MediaController {
     }
 
     @Post('attach')
-    @ApiOperation({ summary: 'Attach uploaded media to listing' })
+    @ApiOperation({ summary: 'Attach uploaded media to listing or product' })
     @ApiResponse({ status: 201, description: 'Media attached' })
     async attachMedia(
         @Body() body: {
-            listingId: string;
-            media: Array<{ url: string; type: 'IMAGE' | 'VIDEO'; sortOrder: number }>;
+            listingId?: string;
+            productId?: string;
+            media: Array<{ url: string; type?: 'IMAGE' | 'VIDEO'; sortOrder: number }>;
         },
         @CurrentUser() user: User,
     ): Promise<ApiResponse<null>> {
-        await this.mediaService.attachMediaToListing(body.listingId, body.media);
+        if (body.productId) {
+            await this.mediaService.attachMediaToProduct(body.productId, body.media);
+        } else if (body.listingId) {
+            const media = body.media.map(m => ({ ...m, type: m.type ?? 'IMAGE' as const }));
+            await this.mediaService.attachMediaToListing(body.listingId, media);
+        } else {
+            throw new BadRequestException('listingId yoki productId kerak');
+        }
         return {
             success: true,
             message: 'Media attached successfully',

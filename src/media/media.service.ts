@@ -133,4 +133,18 @@ export class MediaService {
             orderBy: { sortOrder: 'asc' },
         });
     }
+
+    async attachMediaToProduct(
+        productId: string,
+        media: Array<{ url: string; sortOrder: number }>,
+    ) {
+        await this.prisma.productMedia.deleteMany({ where: { productId } });
+        return this.prisma.productMedia.createMany({
+            data: media.map((m, index) => ({
+                productId,
+                url: m.url,
+                sortOrder: m.sortOrder ?? index,
+            })),
+        });
+    }
 }

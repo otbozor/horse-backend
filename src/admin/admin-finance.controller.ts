@@ -27,6 +27,7 @@ export class AdminFinanceController {
             'listing_oson_start_price', 'listing_oson_start_discount',
             'listing_tezkor_savdo_price', 'listing_tezkor_savdo_discount',
             'listing_turbo_savdo_price', 'listing_turbo_savdo_discount',
+            'listing_bundle_5_price', 'listing_bundle_10_price', 'listing_bundle_20_price',
         ];
         const settings = await this.prisma.appSetting.findMany({ where: { key: { in: keys } } });
         const map: Record<string, string> = {};
@@ -51,6 +52,11 @@ export class AdminFinanceController {
                         discountPrice: map['listing_turbo_savdo_discount'] ? Number(map['listing_turbo_savdo_discount']) : null,
                     },
                 },
+                listingBundles: {
+                    bundle5: Number(map['listing_bundle_5_price'] || 50000),
+                    bundle10: Number(map['listing_bundle_10_price'] || 90000),
+                    bundle20: Number(map['listing_bundle_20_price'] || 160000),
+                },
             },
         };
     }
@@ -66,6 +72,11 @@ export class AdminFinanceController {
                 OSON_START?: { price?: number; discountPrice?: number | null };
                 TEZKOR_SAVDO?: { price?: number; discountPrice?: number | null };
                 TURBO_SAVDO?: { price?: number; discountPrice?: number | null };
+            };
+            listingBundles?: {
+                bundle5?: number;
+                bundle10?: number;
+                bundle20?: number;
             };
         },
     ) {
@@ -108,6 +119,13 @@ export class AdminFinanceController {
                     upserts.push(upsert(`listing_${slug}_discount`, String(data.discountPrice)));
                 }
             }
+        }
+
+        if (body.listingBundles) {
+            const b = body.listingBundles;
+            if (b.bundle5 && b.bundle5 > 0) upserts.push(upsert('listing_bundle_5_price', String(b.bundle5)));
+            if (b.bundle10 && b.bundle10 > 0) upserts.push(upsert('listing_bundle_10_price', String(b.bundle10)));
+            if (b.bundle20 && b.bundle20 > 0) upserts.push(upsert('listing_bundle_20_price', String(b.bundle20)));
         }
 
         await Promise.all(upserts);
