@@ -285,7 +285,11 @@ export class AuthService {
             where: { id: storedToken.id },
         });
 
-        return this.generateTokens(user.id, user.telegramUserId);
+        if (user.isAdmin && user.username) {
+            return this.generateTokensForAdmin(user.id, user.username);
+        }
+
+        return this.generateTokens(user.id, user.telegramUserId!);
     }
 
     // Logout - invalidate refresh token
