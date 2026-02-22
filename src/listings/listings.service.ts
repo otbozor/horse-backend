@@ -383,6 +383,12 @@ export class ListingsService {
                     orderBy: { sortOrder: 'asc' },
                     take: 1,
                 },
+                payments: {
+                    where: { status: 'COMPLETED', packageType: { not: null } },
+                    orderBy: { createdAt: 'desc' },
+                    take: 1,
+                    select: { packageType: true },
+                },
             },
         });
     }

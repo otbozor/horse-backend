@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TelegrafModule } from 'nestjs-telegraf';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TelegramBotService } from './telegram.service';
+import { TelegramChannelService } from './telegram-channel.service';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
@@ -15,7 +16,7 @@ import { AuthModule } from '../auth/auth.module';
         }),
         AuthModule,
     ],
-    providers: [TelegramBotService],
-    exports: [TelegramBotService],
+    providers: [TelegramBotService, TelegramChannelService],
+    exports: [TelegramBotService, TelegramChannelService],
 })
 export class TelegramModule { }

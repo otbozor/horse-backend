@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { TelegramChannelService } from '../telegram/telegram-channel.service';
 import { PaymentStatus, PaymentPackage, ListingStatus, ProductStatus } from '@prisma/client';
 import * as crypto from 'crypto';
 
@@ -26,6 +27,7 @@ export class PaymentService {
     constructor(
         private prisma: PrismaService,
         private configService: ConfigService,
+        private telegramChannel: TelegramChannelService,
     ) {
         this.serviceId = this.configService.get<string>('CLICK_SERVICE_ID') || '95967';
         this.merchantId = this.configService.get<string>('CLICK_MERCHANT_ID') || '44242';
@@ -405,6 +407,25 @@ export class PaymentService {
                 }),
             ]);
             console.log('✅ Listing boost payment completed:', payment.listingId);
+
+            // Post to Telegram channel (fire-and-forget, does not affect payment response)
+            const listingForChannel = await this.prisma.horseListing.findUnique({
+                where: { id: payment.listingId },
+                include: {
+                    region: { select: { nameUz: true } },
+                    district: { select: { nameUz: true } },
+                    breed: { select: { name: true } },
+                    user: { select: { phone: true } },
+                    media: {
+                        where: { type: 'IMAGE' },
+                        orderBy: { sortOrder: 'asc' },
+                        take: 1,
+                    },
+                },
+            });
+            if (listingForChannel) {
+                this.telegramChannel.postListingToChannel(listingForChannel).catch(() => {});
+            }
         } else if (payment.listingId && !payment.packageType) {
             // Reactivation (EXPIRED) or Publication fee (DRAFT) — both send to PENDING
             const listingForUpdate = await this.prisma.horseListing.findUnique({
