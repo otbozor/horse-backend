@@ -23,7 +23,7 @@ interface ListingForChannel {
 export class TelegramChannelService {
     private readonly logger = new Logger(TelegramChannelService.name);
     private readonly channelId: string;
-    private readonly adminChatId: string;
+    private readonly adminChatIds: string[];
     private readonly frontendUrl: string;
 
     constructor(
@@ -31,7 +31,8 @@ export class TelegramChannelService {
         private readonly configService: ConfigService,
     ) {
         this.channelId = this.configService.get<string>('TELEGRAM_CHANNEL_ID') || '';
-        this.adminChatId = this.configService.get<string>('TELEGRAM_ADMIN_CHAT_ID') || '';
+        const raw = this.configService.get<string>('TELEGRAM_ADMIN_CHAT_IDS') || '';
+        this.adminChatIds = raw.split(',').map(s => s.trim()).filter(Boolean);
         this.frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://otbozor.uz';
     }
 
@@ -45,28 +46,34 @@ export class TelegramChannelService {
 
         try {
             const priceNum = listing.priceAmount ? Number(listing.priceAmount.toString()) : null;
+            const currency = listing.priceCurrency || 'UZS';
             const price = priceNum
-                ? `${priceNum.toLocaleString('uz-UZ')} ${listing.priceCurrency || 'UZS'}`
+                ? currency === 'USD'
+                    ? `$${priceNum.toLocaleString('en-US')}`
+                    : `${priceNum.toLocaleString('uz-UZ')} so'm`
                 : "Narx ko'rsatilmagan";
 
             const region = listing.region?.nameUz || '';
             const district = listing.district?.nameUz ? `, ${listing.district.nameUz}` : '';
-            const breed = listing.breed?.name || '';
+            const location = this.escapeHtml((region + district).trim());
+            const breed = listing.breed?.name ? this.escapeHtml(listing.breed.name) : '';
             const age = listing.ageYears ? `${listing.ageYears} yosh` : '';
-            const badge = listing.isPremium ? '👑 Premium' : '⭐️ Top';
+            const badge = listing.isPremium ? '👑 <b>Premium e\'lon</b>' : '⭐️ <b>Top e\'lon</b>';
             const link = `${this.frontendUrl}/ot/${listing.id}-${listing.slug}`;
 
-            const details = [age, breed].filter(Boolean).join(' | ');
+            const detailParts = [breed, age].filter(Boolean);
             const phone = listing.user?.phone || '';
 
             const caption =
-                `${badge}\n\n` +
+                `${badge}\n` +
+                `━━━━━━━━━━━━━━━━━\n\n` +
                 `🐴 <b>${this.escapeHtml(listing.title)}</b>\n\n` +
-                `💰 ${price}\n` +
-                `📍 ${this.escapeHtml(region + district)}\n` +
-                (details ? `🔎 ${this.escapeHtml(details)}\n` : '') +
+                `💰 <b>${price}</b>\n` +
+                (location ? `📍 ${location}\n` : '') +
+                (detailParts.length ? `🔎 ${detailParts.join(' · ')}\n` : '') +
                 (phone ? `📞 ${phone}\n` : '') +
-                `\n<a href="${link}">Saytda ko'rish →</a>`;
+                `\n<a href="${link}">🔗 Batafsil ko'rish →</a>\n\n` +
+                `#otbozor #ot #yilqi`;
 
             const photoUrl = listing.media?.[0]?.url;
 
@@ -91,36 +98,40 @@ export class TelegramChannelService {
     // ─── Adminga yangi ot e'loni keldi ───────────────────────────────────────
 
     async notifyAdminNewListing(listing: { id: string; title: string; userId: string; userName?: string }): Promise<void> {
-        if (!this.adminChatId) return;
-        try {
-            const adminLink = `${this.frontendUrl}/admin/listings/${listing.id}/preview`;
-            const text =
-                `🔔 <b>Yangi ot e'loni tasdiqlash kutmoqda</b>\n\n` +
-                `🐴 ${this.escapeHtml(listing.title)}\n` +
-                (listing.userName ? `👤 ${this.escapeHtml(listing.userName)}\n` : '') +
-                `\n<a href="${adminLink}">Admin panelda ko'rish →</a>`;
+        if (!this.adminChatIds.length) return;
+        const adminLink = `${this.frontendUrl}/admin/listings/${listing.id}/preview`;
+        const text =
+            `🔔 <b>Yangi ot e'loni tasdiqlash kutmoqda</b>\n\n` +
+            `🐴 ${this.escapeHtml(listing.title)}\n` +
+            (listing.userName ? `👤 ${this.escapeHtml(listing.userName)}\n` : '') +
+            `\n<a href="${adminLink}">Admin panelda ko'rish →</a>`;
 
-            await this.bot.telegram.sendMessage(this.adminChatId, text, { parse_mode: 'HTML' });
-        } catch (error) {
-            this.logger.error(`❌ Failed to notify admin (new listing): ${error.message}`);
+        for (const chatId of this.adminChatIds) {
+            try {
+                await this.bot.telegram.sendMessage(chatId, text, { parse_mode: 'HTML' });
+            } catch (error) {
+                this.logger.error(`❌ Failed to notify admin ${chatId} (new listing): ${error.message}`);
+            }
         }
     }
 
     // ─── Adminga yangi mahsulot e'loni keldi ─────────────────────────────────
 
     async notifyAdminNewProduct(product: { id: string; title: string; userName?: string }): Promise<void> {
-        if (!this.adminChatId) return;
-        try {
-            const adminLink = `${this.frontendUrl}/admin/products`;
-            const text =
-                `🔔 <b>Yangi mahsulot tasdiqlash kutmoqda</b>\n\n` +
-                `📦 ${this.escapeHtml(product.title)}\n` +
-                (product.userName ? `👤 ${this.escapeHtml(product.userName)}\n` : '') +
-                `\n<a href="${adminLink}">Admin panelda ko'rish →</a>`;
+        if (!this.adminChatIds.length) return;
+        const adminLink = `${this.frontendUrl}/admin/products`;
+        const text =
+            `🔔 <b>Yangi mahsulot tasdiqlash kutmoqda</b>\n\n` +
+            `📦 ${this.escapeHtml(product.title)}\n` +
+            (product.userName ? `👤 ${this.escapeHtml(product.userName)}\n` : '') +
+            `\n<a href="${adminLink}">Admin panelda ko'rish →</a>`;
 
-            await this.bot.telegram.sendMessage(this.adminChatId, text, { parse_mode: 'HTML' });
-        } catch (error) {
-            this.logger.error(`❌ Failed to notify admin (new product): ${error.message}`);
+        for (const chatId of this.adminChatIds) {
+            try {
+                await this.bot.telegram.sendMessage(chatId, text, { parse_mode: 'HTML' });
+            } catch (error) {
+                this.logger.error(`❌ Failed to notify admin ${chatId} (new product): ${error.message}`);
+            }
         }
     }
 

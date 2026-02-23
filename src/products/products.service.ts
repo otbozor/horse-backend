@@ -104,6 +104,15 @@ export class ProductsService {
                 media: {
                     orderBy: { sortOrder: 'asc' },
                 },
+                user: {
+                    select: {
+                        displayName: true,
+                        telegramUsername: true,
+                        phone: true,
+                        avatarUrl: true,
+                        isVerified: true,
+                    },
+                },
             },
         });
 

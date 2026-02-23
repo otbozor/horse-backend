@@ -278,15 +278,22 @@ export class ListingsService {
             throw new ForbiddenException('You can only edit your own listings');
         }
 
-        if (listing.status !== ListingStatus.DRAFT && listing.status !== ListingStatus.REJECTED) {
-            throw new ForbiddenException('Can only edit draft or rejected listings');
+        const editableStatuses: ListingStatus[] = [
+            ListingStatus.DRAFT,
+            ListingStatus.REJECTED,
+            ListingStatus.EXPIRED,
+            ListingStatus.ARCHIVED,
+        ];
+
+        if (!editableStatuses.includes(listing.status)) {
+            throw new ForbiddenException('Can only edit draft, rejected, expired or archived listings');
         }
 
         return this.prisma.horseListing.update({
             where: { id },
             data: {
                 ...dto,
-                status: ListingStatus.DRAFT, // Reset to draft if editing rejected
+                status: ListingStatus.DRAFT,
             },
         });
     }
@@ -315,7 +322,7 @@ export class ListingsService {
         }
 
         if (listing.media.length === 0) {
-            throw new ForbiddenException('At least one image is required');
+            throw new ForbiddenException('Kamida bitta rasm yuklash kerak');
         }
 
         // Listing credits check
