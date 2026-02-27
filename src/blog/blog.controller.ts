@@ -55,7 +55,6 @@ export class BlogController {
                 timestamp: new Date().toISOString(),
             };
         }
-
         return {
             success: true,
             data: post,
