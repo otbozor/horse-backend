@@ -43,19 +43,14 @@ export class BlogService {
     }
 
     async getPostBySlug(slug: string) {
-        const post = await this.prisma.blogPost.findUnique({
-            where: { slug },
+        return this.prisma.blogPost.findUnique({ where: { slug } });
+    }
+
+    async incrementView(slug: string) {
+        await this.prisma.blogPost.updateMany({
+            where: { slug, status: BlogPostStatus.PUBLISHED },
+            data: { viewCount: { increment: 1 } },
         });
-
-        if (post && post.status === BlogPostStatus.PUBLISHED) {
-            // Increment view count
-            await this.prisma.blogPost.update({
-                where: { id: post.id },
-                data: { viewCount: { increment: 1 } },
-            });
-        }
-
-        return post;
     }
 
     async getRecentPosts(limit = 5) {

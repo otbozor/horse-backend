@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 // import { ThrottlerModule } from '@nestjs/throttler';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -30,6 +31,9 @@ import { PaymentModule } from './payments/payment.module';
         //         limit: 100, // 100 requests per minute
         //     },
         // ]),
+
+        // Cron jobs
+        ScheduleModule.forRoot(),
 
         // Core modules
         PrismaModule,

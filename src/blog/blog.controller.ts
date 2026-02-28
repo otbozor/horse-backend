@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query } from '@nestjs/common';
 import { BlogService } from './blog.service';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 
@@ -40,6 +40,13 @@ export class BlogController {
             message: 'Recent posts retrieved successfully',
             timestamp: new Date().toISOString(),
         };
+    }
+
+    @Post('posts/:slug/view')
+    @ApiOperation({ summary: 'Increment blog post view count' })
+    async incrementView(@Param('slug') slug: string) {
+        await this.blogService.incrementView(slug);
+        return { success: true };
     }
 
     @Get('posts/:slug')
