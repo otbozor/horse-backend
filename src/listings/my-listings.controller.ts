@@ -14,7 +14,7 @@ import { ListingsService } from './listings.service';
 import { CreateListingDto, UpdateListingDto } from './dto/listing.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { User, ListingStatus } from '@prisma/client';
+import { User, ListingStatus, SaleSource } from '@prisma/client';
 
 @ApiTags('My Listings')
 @Controller('my/listings')
@@ -109,8 +109,9 @@ export class MyListingsController {
     async archiveListing(
         @CurrentUser() user: User,
         @Param('id') id: string,
+        @Body('saleSource') saleSource?: SaleSource,
     ) {
-        await this.listingsService.archiveListing(user.id, id);
+        await this.listingsService.archiveListing(user.id, id, saleSource);
         return { success: true };
     }
 

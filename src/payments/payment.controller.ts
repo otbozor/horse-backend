@@ -118,6 +118,18 @@ export class PaymentController {
         return { success: true, data: result };
     }
 
+    @Post('create-credit-bundle-invoice')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Create credits bundle invoice (no listing)' })
+    async createCreditBundleInvoice(
+        @Body() body: { bundleSize: 5 | 10 | 20 },
+        @CurrentUser() user: User,
+    ) {
+        const result = await this.paymentService.createCreditBundleInvoice(user.id, body.bundleSize);
+        return { success: true, data: result };
+    }
+
     @Post('create-product-invoice')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()

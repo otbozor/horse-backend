@@ -1,7 +1,7 @@
 import { Injectable, ForbiddenException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramChannelService } from '../telegram/telegram-channel.service';
-import { ListingStatus, Prisma } from '@prisma/client';
+import { ListingStatus, SaleSource, Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -113,6 +113,7 @@ export class AdminService {
         status?: ListingStatus;
         isPaid?: boolean;
         regionId?: string;
+        saleSource?: SaleSource;
         page?: number;
         limit?: number;
     }) {
@@ -121,6 +122,7 @@ export class AdminService {
         if (options?.status) where.status = options.status;
         if (options?.isPaid !== undefined) where.isPaid = options.isPaid;
         if (options?.regionId) where.regionId = options.regionId;
+        if (options?.saleSource) where.saleSource = options.saleSource;
 
         const page = options?.page || 1;
         const limit = Math.min(options?.limit || 20, 50);

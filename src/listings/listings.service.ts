@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException, HttpException, HttpStatus } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramChannelService } from '../telegram/telegram-channel.service';
-import { Prisma, ListingStatus, HorseListing } from '@prisma/client';
+import { Prisma, ListingStatus, SaleSource, HorseListing } from '@prisma/client';
 import slugify from 'slugify';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateListingDto, UpdateListingDto, ListingsFilterDto } from './dto/listing.dto';
@@ -348,6 +348,7 @@ export class ListingsService {
                 where: { id },
                 data: {
                     status: ListingStatus.PENDING,
+                    isPaid: true,
                     hasVideo: listing.media.some((m) => m.type === 'VIDEO'),
                 },
             }),
@@ -416,7 +417,7 @@ export class ListingsService {
         });
     }
 
-    async archiveListing(userId: string, id: string): Promise<void> {
+    async archiveListing(userId: string, id: string, saleSource?: SaleSource): Promise<void> {
         const listing = await this.prisma.horseListing.findUnique({
             where: { id },
         });
@@ -431,7 +432,10 @@ export class ListingsService {
 
         await this.prisma.horseListing.update({
             where: { id },
-            data: { status: ListingStatus.ARCHIVED },
+            data: {
+                status: ListingStatus.ARCHIVED,
+                ...(saleSource && { saleSource }),
+            },
         });
     }
 

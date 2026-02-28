@@ -3,7 +3,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { User, ListingStatus } from '@prisma/client';
+import { User, ListingStatus, SaleSource } from '@prisma/client';
 
 // Response wrapper
 interface ApiResponse<T> {
@@ -27,6 +27,7 @@ export class AdminListingsController {
         @Query('status') status?: string,
         @Query('isPaid') isPaid?: string,
         @Query('regionId') regionId?: string,
+        @Query('saleSource') saleSource?: string,
         @Query('page') page?: number,
         @Query('limit') limit?: number,
     ): Promise<ApiResponse<any>> {
@@ -35,6 +36,7 @@ export class AdminListingsController {
             status: status as ListingStatus | undefined,
             isPaid: isPaid !== undefined ? isPaid === 'true' : undefined,
             regionId,
+            saleSource: saleSource as SaleSource | undefined,
             page: page ? Number(page) : undefined,
             limit: limit ? Number(limit) : undefined,
         });

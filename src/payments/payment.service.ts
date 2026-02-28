@@ -198,6 +198,35 @@ export class PaymentService {
         return { paymentId: payment.id, amount, clickUrl };
     }
 
+    // Create invoice for credits bundle (no listing — just add credits)
+    async createCreditBundleInvoice(userId: string, bundleSize: 5 | 10 | 20) {
+        const prices = await this.getListingBundlePrices();
+        const amountMap: Record<number, number> = { 5: prices.bundle5, 10: prices.bundle10, 20: prices.bundle20 };
+        const amount = amountMap[bundleSize];
+        if (!amount) throw new BadRequestException('Noto\'g\'ri paket hajmi');
+
+        const payment = await this.prisma.payment.create({
+            data: {
+                userId,
+                amount,
+                listingBundleSize: bundleSize,
+                status: PaymentStatus.PENDING,
+                merchantPrepareId: Math.floor(Math.random() * 2000000000) + 1,
+            },
+        });
+
+        const returnUrl = `${this.frontendUrl}/paketlar/natija?paymentId=${payment.id}`;
+        const clickUrl =
+            `https://my.click.uz/services/pay` +
+            `?service_id=${this.serviceId}` +
+            `&merchant_id=${this.merchantId}` +
+            `&amount=${amount}` +
+            `&transaction_param=${payment.id}` +
+            `&return_url=${encodeURIComponent(returnUrl)}`;
+
+        return { paymentId: payment.id, amount, clickUrl };
+    }
+
     // Create invoice for product listing
     async createProductInvoice(userId: string, productId: string) {
         const product = await this.prisma.product.findUnique({ where: { id: productId } });
@@ -361,7 +390,24 @@ export class PaymentService {
         }
 
         // ✅ Complete payment
-        if (payment.listingBundleSize && payment.listingId) {
+        if (payment.listingBundleSize && !payment.listingId) {
+            // Credits-only bundle purchase (no listing to auto-submit)
+            await this.prisma.$transaction([
+                this.prisma.payment.update({
+                    where: { id: merchant_trans_id },
+                    data: {
+                        status: PaymentStatus.COMPLETED,
+                        clickTransId: click_trans_id,
+                        clickPaydocId: click_paydoc_id,
+                    },
+                }),
+                this.prisma.user.update({
+                    where: { id: payment.userId },
+                    data: { listingCredits: { increment: payment.listingBundleSize } },
+                }),
+            ]);
+            console.log(`✅ Credits bundle (${payment.listingBundleSize}) purchased, credits added to user:`, payment.userId);
+        } else if (payment.listingBundleSize && payment.listingId) {
             // Listing credits bundle purchase — add credits to user + auto-submit listing
             const bundleSize = payment.listingBundleSize;
             await this.prisma.$transaction([
@@ -383,6 +429,7 @@ export class PaymentService {
                     where: { id: payment.listingId },
                     data: {
                         status: ListingStatus.PENDING,
+                        isPaid: true,
                     },
                 }),
             ]);

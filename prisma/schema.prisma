@@ -151,6 +151,11 @@ enum ListingStatus {
   EXPIRED
 }
 
+enum SaleSource {
+  OTBOZOR
+  OTHER
+}
+
 enum Currency {
   UZS
   USD
@@ -184,6 +189,7 @@ model HorseListing {
   isTop         Boolean       @default(false) @map("is_top")
   isPremium     Boolean       @default(false) @map("is_premium")
   rejectReason  String?       @map("reject_reason")
+  saleSource    SaleSource?   @map("sale_source")
   
   viewCount     Int           @default(0) @map("view_count")
   favoriteCount Int           @default(0) @map("favorite_count")
