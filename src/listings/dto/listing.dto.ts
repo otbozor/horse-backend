@@ -17,10 +17,9 @@ export class CreateListingDto {
     @IsString()
     title: string;
 
-    @ApiPropertyOptional({ description: 'Listing description' })
-    @IsOptional()
+    @ApiProperty({ description: 'Listing description' })
     @IsString()
-    description?: string;
+    description: string;
 
     @ApiProperty({ description: 'Region ID' })
     @IsUUID()
@@ -53,10 +52,9 @@ export class CreateListingDto {
     @Max(40)
     ageYears?: number;
 
-    @ApiPropertyOptional({ description: 'Horse color' })
-    @IsOptional()
+    @ApiProperty({ description: 'Horse color' })
     @IsString()
-    color?: string;
+    color: string;
 
     @ApiProperty({ description: 'Price amount' })
     @IsNumber()
