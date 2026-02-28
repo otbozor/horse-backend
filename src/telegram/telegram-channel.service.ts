@@ -179,6 +179,26 @@ export class TelegramChannelService {
         }
     }
 
+    // ─── E'lon muddati tugadi bildirishnomasi ─────────────────────────────────
+
+    async notifyUserListingExpired(
+        telegramUserId: string,
+        listing: { id: string; title: string },
+    ): Promise<void> {
+        try {
+            const reactivateLink = `${this.frontendUrl}/elon/${listing.id}/nashr-tolov`;
+            const text =
+                `⏰ <b>E'loningiz muddati tugadi!</b>\n\n` +
+                `🐴 ${this.escapeHtml(listing.title)}\n\n` +
+                `E'lonni qayta faollashtirish uchun quyidagi havolani bosing:\n` +
+                `<a href="${reactivateLink}">🔄 Faollashtirish →</a>`;
+
+            await this.bot.telegram.sendMessage(telegramUserId, text, { parse_mode: 'HTML' });
+        } catch (error) {
+            this.logger.error(`❌ Failed to notify user (listing expired): ${error.message}`);
+        }
+    }
+
     // ─── Yordamchi ───────────────────────────────────────────────────────────
 
     private escapeHtml(text: string): string {
