@@ -433,7 +433,8 @@ model BlogPost {
   excerpt       String?
   content       String         @db.Text
   coverImage    String?        @map("cover_image")
-  
+  keywords      String?
+
   authorId      String         @map("author_id")
   
   status        BlogPostStatus @default(DRAFT)

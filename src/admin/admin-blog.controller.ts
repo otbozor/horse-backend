@@ -200,7 +200,7 @@ export class AdminBlogController {
     ) {
         await this.adminService.requireAdmin(user.id);
 
-        const { title, slug, excerpt, content } = body;
+        const { title, slug, excerpt, content, keywords } = body;
 
         if (!title || !slug || !content) {
             throw new BadRequestException('title, slug, va content talab qilinadi');
@@ -218,6 +218,7 @@ export class AdminBlogController {
             slug,
             excerpt,
             content,
+            keywords: keywords || null,
             coverImage,
             authorId: user.id,
         });
@@ -260,6 +261,7 @@ export class AdminBlogController {
         if (body.slug !== undefined) updateData.slug = body.slug;
         if (body.excerpt !== undefined) updateData.excerpt = body.excerpt;
         if (body.content !== undefined) updateData.content = body.content;
+        if (body.keywords !== undefined) updateData.keywords = body.keywords || null;
         if (coverImage) updateData.coverImage = coverImage;
 
         const post = await this.blogService.updatePost(id, updateData);
