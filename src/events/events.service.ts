@@ -56,15 +56,14 @@ export class EventsService {
             },
         });
 
-        if (event) {
-            // Increment view count
-            await this.prisma.event.update({
-                where: { id: event.id },
-                data: { viewCount: { increment: 1 } },
-            });
-        }
-
         return event;
+    }
+
+    async incrementView(slug: string) {
+        await this.prisma.event.updateMany({
+            where: { slug },
+            data: { viewCount: { increment: 1 } },
+        });
     }
 
     async getAllEvents(filters?: {

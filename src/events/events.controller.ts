@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query } from '@nestjs/common';
 import { EventsService } from './events.service';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 
@@ -20,6 +20,13 @@ export class EventsController {
             message: 'Upcoming events retrieved successfully',
             timestamp: new Date().toISOString(),
         };
+    }
+
+    @Post(':slug/view')
+    @ApiOperation({ summary: 'Increment event view count' })
+    async incrementView(@Param('slug') slug: string) {
+        await this.eventsService.incrementView(slug);
+        return { success: true };
     }
 
     @Get(':slug')
