@@ -231,7 +231,26 @@ export class AdminService {
                 listing.user.telegramUserId.toString(),
                 'approved',
                 { id: listing.id, title: listing.title },
-            ).catch(() => {});
+            ).catch(() => { });
+        }
+
+        // Telegram kanalga e'lon yuborish (fire-and-forget)
+        const listingForChannel = await this.prisma.horseListing.findUnique({
+            where: { id: listingId },
+            include: {
+                region: { select: { nameUz: true } },
+                district: { select: { nameUz: true } },
+                breed: { select: { name: true } },
+                user: { select: { phone: true } },
+                media: {
+                    where: { type: 'IMAGE' },
+                    orderBy: { sortOrder: 'asc' },
+                    take: 1,
+                },
+            },
+        });
+        if (listingForChannel) {
+            this.telegramNotify.postListingToChannel(listingForChannel).catch(() => { });
         }
 
         const { user: _user, ...listingData } = listing;
@@ -279,7 +298,7 @@ export class AdminService {
                 'rejected',
                 { id: listing.id, title: listing.title },
                 reason,
-            ).catch(() => {});
+            ).catch(() => { });
         }
 
         const { user: _user, ...listingData } = listing;
