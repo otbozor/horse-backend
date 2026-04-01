@@ -59,15 +59,23 @@ export class TelegramChannelService {
             const age = listing.ageYears ? `${listing.ageYears} yosh` : '';
             const link = `${this.frontendUrl}/ot/${listing.id}-${listing.slug}`;
 
+            // Zot va yosh uchun emoji
+            const breedEmoji = this.getBreedEmoji(breed);
+            const ageEmoji = this.getAgeEmoji(listing.ageYears);
+
             // Xabar matni
             let caption = `<b>${this.escapeHtml(listing.title)}</b>\n\n`;
 
-            if (price) caption += `💰 Narxi: ${price}\n`;
-            if (region) caption += `📍 Joylashuvi: ${this.escapeHtml(region)}${district ? ', ' + this.escapeHtml(district) : ''}\n`;
-            if (breed) caption += `🔎 Zoti: ${this.escapeHtml(breed)}\n`;
-            if (age) caption += `📅 Yoshi: ${age}\n`;
+            if (price) caption += `<b>💰 Narxi:</b> ${price}\n`;
+            if (region) caption += `<b>📍 Joylashuvi:</b> ${this.escapeHtml(region)}${district ? ', ' + this.escapeHtml(district) : ''}\n`;
+            if (breed) caption += `<b>${breedEmoji} Zoti:</b> ${this.escapeHtml(breed)}\n`;
+            if (age) caption += `<b>${ageEmoji} Yoshi:</b> ${age}\n`;
 
-            caption += `\n<a href="${link}">Bog'lanish va batafsil ma'lumot</a>\n\n`;
+            caption += `\n<b><a href="${link}">Bog'lanish va batafsil ma'lumot</a></b>\n\n`;
+            caption += `Otbozor.uz — ot savdosi uchun maxsus yaratilgan platforma.\n\n`;
+            caption += `<b><a href="https://t.me/otbozor_rasmiy">Telegram kanal</a></b> | `;
+            caption += `<b><a href="https://t.me/otbozor_rasmiy_guruh">Telegram guruh</a></b> | `;
+            caption += `<b><a href="https://instagram.com/otbozor.uz">Instagram</a></b>\n\n`;
             caption += `#otbozor #ot #yilqi`;
 
             const photoUrl = listing.media?.[0]?.url;
@@ -201,5 +209,23 @@ export class TelegramChannelService {
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;');
+    }
+
+    // ─── Zot uchun emoji ─────────────────────────────────────────────────────
+
+    private getBreedEmoji(breed: string): string {
+        const breedLower = breed.toLowerCase();
+        if (breedLower.includes('karabayir') || breedLower.includes('qorabayir')) return '🐎';
+        if (breedLower.includes('arab')) return '🏇';
+        if (breedLower.includes('axaltekin') || breedLower.includes('ahal')) return '🦄';
+        if (breedLower.includes('lokai') || breedLower.includes('loqay')) return '🐴';
+        if (breedLower.includes('yomud') || breedLower.includes('iomud')) return '🏇';
+        return '🐴'; // default
+    }
+
+    // ─── Yosh uchun emoji ────────────────────────────────────────────────────
+
+    private getAgeEmoji(ageYears: number | null): string {
+        return '⚡';
     }
 }
