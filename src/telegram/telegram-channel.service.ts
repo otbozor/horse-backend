@@ -78,18 +78,30 @@ export class TelegramChannelService {
             caption += `<b><a href="https://instagram.com/otbozor.uz">Instagram</a></b>\n\n`;
             caption += `#otbozor #ot #yilqi`;
 
-            const photoUrl = listing.media?.[0]?.url;
+            const images = listing.media?.filter(m => m.url) || [];
 
-            if (photoUrl) {
-                await this.bot.telegram.sendPhoto(this.channelId, photoUrl, {
-                    caption,
-                    parse_mode: 'HTML',
-                });
-            } else {
+            if (images.length === 0) {
+                // Rasm yo'q - faqat matn yuborish
                 await this.bot.telegram.sendMessage(this.channelId, caption, {
                     parse_mode: 'HTML',
                     link_preview_options: { is_disabled: false },
                 });
+            } else if (images.length === 1) {
+                // Bitta rasm - sendPhoto
+                await this.bot.telegram.sendPhoto(this.channelId, images[0].url, {
+                    caption,
+                    parse_mode: 'HTML',
+                });
+            } else {
+                // Bir nechta rasm - sendMediaGroup (maksimal 10 ta)
+                const mediaGroup = images.slice(0, 10).map((img, idx) => ({
+                    type: 'photo' as const,
+                    media: img.url,
+                    caption: idx === 0 ? caption : undefined,
+                    parse_mode: 'HTML' as const,
+                }));
+
+                await this.bot.telegram.sendMediaGroup(this.channelId, mediaGroup);
             }
 
             this.logger.log(`✅ Listing posted to Telegram channel: ${listing.id}`);

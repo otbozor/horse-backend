@@ -245,7 +245,6 @@ export class AdminService {
                 media: {
                     where: { type: 'IMAGE' },
                     orderBy: { sortOrder: 'asc' },
-                    take: 1,
                 },
             },
         });
