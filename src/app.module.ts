@@ -15,6 +15,7 @@ import { EventsModule } from './events/events.module';
 import { BlogModule } from './blog/blog.module';
 import { ProductsModule } from './products/products.module';
 import { PaymentModule } from './payments/payment.module';
+import { CommentsModule } from './comments/comments.module';
 
 @Module({
     imports: [
@@ -55,6 +56,9 @@ import { PaymentModule } from './payments/payment.module';
 
         // Payments
         PaymentModule,
+
+        // Comments
+        CommentsModule,
     ],
 })
 export class AppModule { }

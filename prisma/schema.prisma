@@ -51,6 +51,7 @@ model User {
   viewLogs         ViewLog[]
   auditLogs        AuditLog[]
   payments         Payment[]
+  comments         Comment[]
 
   @@map("users")
 }
@@ -209,6 +210,7 @@ model HorseListing {
   favorites     Favorite[]
   viewLogs      ViewLog[]
   payments      Payment[]
+  comments      Comment[]
 
   @@index([userId])
   @@index([regionId])
@@ -268,6 +270,30 @@ model ViewLog {
   @@index([listingId])
   @@index([userId])
   @@map("view_logs")
+}
+
+// ============================================
+// COMMENTS
+// ============================================
+
+model Comment {
+  id        String   @id @default(uuid())
+  listingId String   @map("listing_id")
+  userId    String   @map("user_id")
+  parentId  String?  @map("parent_id")
+  content   String   @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  listing   HorseListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent    Comment?     @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   Comment[]    @relation("CommentReplies")
+
+  @@index([listingId])
+  @@index([userId])
+  @@index([parentId])
+  @@map("comments")
 }
 
 // ============================================
