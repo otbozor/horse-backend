@@ -69,8 +69,7 @@ export class TelegramChannelService {
             if (breed) caption += `<b>${breedEmoji} Zoti:</b> ${this.escapeHtml(breed)}\n`;
             if (age) caption += `<b>${ageEmoji} Yoshi:</b> ${age}\n`;
 
-            caption += `\n<b><a href="${link}">Bog'lanish va batafsil ma'lumot</a></b>\n\n`;
-            caption += `Otbozor.uz — ot savdosi uchun maxsus yaratilgan platforma.\n\n`;
+            caption += `\nOtbozor.uz — ot savdosi uchun maxsus yaratilgan platforma.\n\n`;
             caption += `<b><a href="https://t.me/otbozor_rasmiy">Telegram kanal</a></b> | `;
             caption += `<b><a href="https://t.me/otbozor_rasmiy_guruh">Telegram guruh</a></b> | `;
             caption += `<b><a href="https://instagram.com/otbozor.uz">Instagram</a></b>`;
@@ -79,9 +78,14 @@ export class TelegramChannelService {
 
             const keyboard = {
                 inline_keyboard: [
-                    [{ text: "E'lon joylash", url: `${this.frontendUrl}/elon/yangi` }],
-                    [{ text: "E'lonlarni ko'rish", url: `${this.frontendUrl}/bozor` }],
-                    [{ text: "Admin bilan bog'lanish", url: `https://t.me/${this.adminUsername.replace('@', '')}` }],
+                    [
+                        { text: "To'liq ma'lumot", url: link },
+                        { text: "E'lon joylash", url: `${this.frontendUrl}/elon/yangi` }
+                    ],
+                    [
+                        { text: "Barcha e'lonlar", url: `${this.frontendUrl}/bozor` },
+                        { text: "Admin", url: `https://t.me/${this.adminUsername.replace('@', '')}` }
+                    ],
                 ],
             };
 
@@ -91,22 +95,11 @@ export class TelegramChannelService {
                     link_preview_options: { is_disabled: false },
                     reply_markup: keyboard,
                 });
-            } else if (images.length === 1) {
+            } else {
+                // Faqat birinchi rasmni yuborish (buttonlar bilan)
                 await this.bot.telegram.sendPhoto(this.channelId, images[0].url, {
                     caption,
                     parse_mode: 'HTML',
-                    reply_markup: keyboard,
-                });
-            } else {
-                const mediaGroup = images.slice(0, 10).map((img, idx) => ({
-                    type: 'photo' as const,
-                    media: img.url,
-                    caption: idx === 0 ? caption : undefined,
-                    parse_mode: 'HTML' as const,
-                }));
-
-                await this.bot.telegram.sendMediaGroup(this.channelId, mediaGroup);
-                await this.bot.telegram.sendMessage(this.channelId, '👇 Havolalar:', {
                     reply_markup: keyboard,
                 });
             }
