@@ -25,6 +25,7 @@ export class TelegramChannelService {
     private readonly channelId: string;
     private readonly adminChatIds: string[];
     private readonly frontendUrl: string;
+    private readonly adminUsername: string;
 
     constructor(
         @InjectBot() private readonly bot: Telegraf,
@@ -34,9 +35,8 @@ export class TelegramChannelService {
         const raw = this.configService.get<string>('TELEGRAM_ADMIN_CHAT_IDS') || '';
         this.adminChatIds = raw.split(',').map(s => s.trim()).filter(Boolean);
         this.frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://otbozor.uz';
+        this.adminUsername = this.configService.get<string>('TELEGRAM_ADMIN_USERNAME') || '@otbozor_admin';
     }
-
-    // ─── Kanalga e'lon yuborish (boost to'lovi) ─────────────────────────────
 
     async postListingToChannel(listing: ListingForChannel): Promise<void> {
         if (!this.channelId) {
@@ -49,7 +49,7 @@ export class TelegramChannelService {
             const currency = listing.priceCurrency || 'UZS';
             const price = priceNum
                 ? currency === 'USD'
-                    ? `$${priceNum.toLocaleString('en-US')}`
+                    ? `${priceNum.toLocaleString('en-US')}`
                     : `${priceNum.toLocaleString('uz-UZ')} so'm`
                 : "Narx ko'rsatilmagan";
 
@@ -59,11 +59,9 @@ export class TelegramChannelService {
             const age = listing.ageYears ? `${listing.ageYears} yosh` : '';
             const link = `${this.frontendUrl}/ot/${listing.id}-${listing.slug}`;
 
-            // Zot va yosh uchun emoji
             const breedEmoji = this.getBreedEmoji(breed);
             const ageEmoji = this.getAgeEmoji(listing.ageYears);
 
-            // Xabar matni
             let caption = `<b>${this.escapeHtml(listing.title)}</b>\n\n`;
 
             if (price) caption += `<b>💰 Narxi:</b> ${price}\n`;
@@ -75,25 +73,31 @@ export class TelegramChannelService {
             caption += `Otbozor.uz — ot savdosi uchun maxsus yaratilgan platforma.\n\n`;
             caption += `<b><a href="https://t.me/otbozor_rasmiy">Telegram kanal</a></b> | `;
             caption += `<b><a href="https://t.me/otbozor_rasmiy_guruh">Telegram guruh</a></b> | `;
-            caption += `<b><a href="https://instagram.com/otbozor.uz">Instagram</a></b>\n\n`;
-            caption += `#otbozor #ot #yilqi`;
+            caption += `<b><a href="https://instagram.com/otbozor.uz">Instagram</a></b>`;
 
             const images = listing.media?.filter(m => m.url) || [];
 
+            const keyboard = {
+                inline_keyboard: [
+                    [{ text: "E'lon joylash", url: `${this.frontendUrl}/elon/yangi` }],
+                    [{ text: "E'lonlarni ko'rish", url: `${this.frontendUrl}/bozor` }],
+                    [{ text: "Admin bilan bog'lanish", url: `https://t.me/${this.adminUsername.replace('@', '')}` }],
+                ],
+            };
+
             if (images.length === 0) {
-                // Rasm yo'q - faqat matn yuborish
                 await this.bot.telegram.sendMessage(this.channelId, caption, {
                     parse_mode: 'HTML',
                     link_preview_options: { is_disabled: false },
+                    reply_markup: keyboard,
                 });
             } else if (images.length === 1) {
-                // Bitta rasm - sendPhoto
                 await this.bot.telegram.sendPhoto(this.channelId, images[0].url, {
                     caption,
                     parse_mode: 'HTML',
+                    reply_markup: keyboard,
                 });
             } else {
-                // Bir nechta rasm - sendMediaGroup (maksimal 10 ta)
                 const mediaGroup = images.slice(0, 10).map((img, idx) => ({
                     type: 'photo' as const,
                     media: img.url,
@@ -102,6 +106,9 @@ export class TelegramChannelService {
                 }));
 
                 await this.bot.telegram.sendMediaGroup(this.channelId, mediaGroup);
+                await this.bot.telegram.sendMessage(this.channelId, '👇 Havolalar:', {
+                    reply_markup: keyboard,
+                });
             }
 
             this.logger.log(`✅ Listing posted to Telegram channel: ${listing.id}`);
@@ -109,8 +116,6 @@ export class TelegramChannelService {
             this.logger.error(`❌ Failed to post listing to Telegram channel: ${error.message}`);
         }
     }
-
-    // ─── Adminga yangi ot e'loni keldi ───────────────────────────────────────
 
     async notifyAdminNewListing(listing: { id: string; title: string; userId: string; userName?: string }): Promise<void> {
         if (!this.adminChatIds.length) return;
@@ -130,8 +135,6 @@ export class TelegramChannelService {
         }
     }
 
-    // ─── Adminga yangi mahsulot e'loni keldi ─────────────────────────────────
-
     async notifyAdminNewProduct(product: { id: string; title: string; userName?: string }): Promise<void> {
         if (!this.adminChatIds.length) return;
         const adminLink = `${this.frontendUrl}/admin/products`;
@@ -149,8 +152,6 @@ export class TelegramChannelService {
             }
         }
     }
-
-    // ─── Userage ot e'loni tasdiqlandi/rad etildi ────────────────────────────
 
     async notifyUserListingResult(
         telegramUserId: string,
@@ -175,8 +176,6 @@ export class TelegramChannelService {
         }
     }
 
-    // ─── Userage mahsulot tasdiqlandi ────────────────────────────────────────
-
     async notifyUserProductResult(
         telegramUserId: string,
         product: { id: string; title: string; slug?: string },
@@ -193,8 +192,6 @@ export class TelegramChannelService {
             this.logger.error(`❌ Failed to notify user (product published): ${error.message}`);
         }
     }
-
-    // ─── E'lon muddati tugadi bildirishnomasi ─────────────────────────────────
 
     async notifyUserListingExpired(
         telegramUserId: string,
@@ -214,16 +211,12 @@ export class TelegramChannelService {
         }
     }
 
-    // ─── Yordamchi ───────────────────────────────────────────────────────────
-
     private escapeHtml(text: string): string {
         return text
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;');
     }
-
-    // ─── Zot uchun emoji ─────────────────────────────────────────────────────
 
     private getBreedEmoji(breed: string): string {
         const breedLower = breed.toLowerCase();
@@ -232,12 +225,56 @@ export class TelegramChannelService {
         if (breedLower.includes('axaltekin') || breedLower.includes('ahal')) return '🦄';
         if (breedLower.includes('lokai') || breedLower.includes('loqay')) return '🐴';
         if (breedLower.includes('yomud') || breedLower.includes('iomud')) return '🏇';
-        return '🐴'; // default
+        return '🐴';
     }
-
-    // ─── Yosh uchun emoji ────────────────────────────────────────────────────
 
     private getAgeEmoji(ageYears: number | null): string {
         return '⚡';
+    }
+
+    async postBlogToChannel(post: {
+        id: string;
+        slug: string;
+        title: string;
+        excerpt?: string;
+        coverImage?: string;
+    }): Promise<void> {
+        if (!this.channelId) {
+            this.logger.warn('TELEGRAM_CHANNEL_ID not set — skipping channel post');
+            return;
+        }
+
+        try {
+            const link = `${this.frontendUrl}/blog/${post.slug}`;
+
+            let caption = `#foydali_maqola\n`;
+            caption += `<b>${this.escapeHtml(post.title)}</b>\n\n`;
+
+            if (post.excerpt) {
+                caption += `${this.escapeHtml(post.excerpt)}\n\n`;
+            }
+
+            caption += `<a href="${link}">Maqolani o'qish →</a>\n\n`;
+            caption += `<b>Otbozor.uz — ot savdosi uchun maxsus yaratilgan platforma.</b>\n\n`;
+            caption += `<a href="https://t.me/otbozor_rasmiy">Telegram kanal</a> | `;
+            caption += `<a href="https://t.me/otbozor_rasmiy_guruh">Telegram guruh</a> | `;
+            caption += `<a href="https://instagram.com/otbozor.uz">Instagram</a>`;
+
+            if (post.coverImage) {
+                await this.bot.telegram.sendPhoto(this.channelId, post.coverImage, {
+                    caption,
+                    parse_mode: 'HTML',
+                });
+            } else {
+                await this.bot.telegram.sendMessage(this.channelId, caption, {
+                    parse_mode: 'HTML',
+                    link_preview_options: { is_disabled: false },
+                });
+            }
+
+            this.logger.log(`✅ Blog post posted to Telegram channel: ${post.id}`);
+        } catch (error) {
+            this.logger.error(`❌ Failed to post blog to Telegram channel: ${error.message}`);
+        }
     }
 }

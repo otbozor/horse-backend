@@ -466,12 +466,11 @@ export class PaymentService {
                     media: {
                         where: { type: 'IMAGE' },
                         orderBy: { sortOrder: 'asc' },
-                        take: 1,
                     },
                 },
             });
             if (listingForChannel) {
-                this.telegramChannel.postListingToChannel(listingForChannel).catch(() => {});
+                this.telegramChannel.postListingToChannel(listingForChannel).catch(() => { });
             }
         } else if (payment.listingId && !payment.packageType) {
             // Reactivation (EXPIRED) or Publication fee (DRAFT) — both send to PENDING
@@ -529,7 +528,7 @@ export class PaymentService {
                     id: productForNotify.id,
                     title: productForNotify.title,
                     userName: productForNotify.user?.displayName,
-                }).catch(() => {});
+                }).catch(() => { });
             }
         }
 

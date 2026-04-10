@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { TelegramChannelService } from '../telegram/telegram-channel.service';
 import { BlogPostStatus } from '@prisma/client';
 
 @Injectable()
 export class BlogService {
-    constructor(private prisma: PrismaService) { }
+    constructor(
+        private prisma: PrismaService,
+        private telegramChannel: TelegramChannelService,
+    ) { }
 
     // Public methods
     async getPosts(filters?: {
@@ -111,13 +115,24 @@ export class BlogService {
     }
 
     async createPost(data: any) {
-        return this.prisma.blogPost.create({
+        const post = await this.prisma.blogPost.create({
             data: {
                 ...data,
                 status: BlogPostStatus.PUBLISHED,
                 publishedAt: new Date(),
             },
         });
+
+        // Telegram kanalga yuborish (fire-and-forget)
+        this.telegramChannel.postBlogToChannel({
+            id: post.id,
+            slug: post.slug,
+            title: post.title,
+            excerpt: post.excerpt || undefined,
+            coverImage: post.coverImage || undefined,
+        }).catch(() => { });
+
+        return post;
     }
 
     async updatePost(id: string, data: any) {
@@ -128,13 +143,24 @@ export class BlogService {
     }
 
     async publishPost(id: string) {
-        return this.prisma.blogPost.update({
+        const post = await this.prisma.blogPost.update({
             where: { id },
             data: {
                 status: BlogPostStatus.PUBLISHED,
                 publishedAt: new Date(),
             },
         });
+
+        // Telegram kanalga yuborish (fire-and-forget)
+        this.telegramChannel.postBlogToChannel({
+            id: post.id,
+            slug: post.slug,
+            title: post.title,
+            excerpt: post.excerpt || undefined,
+            coverImage: post.coverImage || undefined,
+        }).catch(() => { });
+
+        return post;
     }
 
     async archivePost(id: string) {
