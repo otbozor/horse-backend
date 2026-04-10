@@ -49,7 +49,7 @@ export class TelegramChannelService {
             const currency = listing.priceCurrency || 'UZS';
             const price = priceNum
                 ? currency === 'USD'
-                    ? `${priceNum.toLocaleString('en-US')}`
+                    ? `$${priceNum.toLocaleString('en-US')}`
                     : `${priceNum.toLocaleString('uz-UZ')} so'm`
                 : "Narx ko'rsatilmagan";
 
