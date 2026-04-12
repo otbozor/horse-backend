@@ -80,7 +80,7 @@ export class TelegramChannelService {
                 inline_keyboard: [
                     [
                         { text: "To'liq ma'lumot", url: link },
-                        { text: "E'lon joylash", url: `${this.frontendUrl}/elon/yangi` }
+                        { text: "E'lon joylash", url: `${this.frontendUrl}/elon/yaratish` }
                     ],
                     [
                         { text: "Barcha e'lonlar", url: `${this.frontendUrl}/bozor` },
