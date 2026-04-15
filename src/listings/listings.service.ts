@@ -340,31 +340,48 @@ export class ListingsService {
             // First-time submission — check and deduct credit
             const user = await this.prisma.user.findUnique({
                 where: { id: userId },
-                select: { listingCredits: true },
+                select: { listingCredits: true, hasUnlimitedListings: true },
             });
 
-            if (!user || user.listingCredits <= 0) {
+            if (!user) {
+                throw new NotFoundException('User not found');
+            }
+
+            // Admin tomonidan cheksiz e'lon yuklash huquqi berilgan userlar uchun kredit tekshirilmaydi
+            if (!user.hasUnlimitedListings && user.listingCredits <= 0) {
                 throw new HttpException(
                     { requiresPayment: true, listingId: id },
                     HttpStatus.PAYMENT_REQUIRED,
                 );
             }
 
-            // Decrement 1 credit and submit in transaction
-            await this.prisma.$transaction([
-                this.prisma.user.update({
-                    where: { id: userId },
-                    data: { listingCredits: { decrement: 1 } },
-                }),
-                this.prisma.horseListing.update({
+            // Cheksiz huquqi bo'lgan userlar uchun kredit kamaytirilmaydi
+            if (user.hasUnlimitedListings) {
+                await this.prisma.horseListing.update({
                     where: { id },
                     data: {
                         status: ListingStatus.PENDING,
                         isPaid: true,
                         hasVideo: listing.media.some((m) => m.type === 'VIDEO'),
                     },
-                }),
-            ]);
+                });
+            } else {
+                // Oddiy userlar uchun 1 kredit kamaytiriladi
+                await this.prisma.$transaction([
+                    this.prisma.user.update({
+                        where: { id: userId },
+                        data: { listingCredits: { decrement: 1 } },
+                    }),
+                    this.prisma.horseListing.update({
+                        where: { id },
+                        data: {
+                            status: ListingStatus.PENDING,
+                            isPaid: true,
+                            hasVideo: listing.media.some((m) => m.type === 'VIDEO'),
+                        },
+                    }),
+                ]);
+            }
         }
 
         // Adminga xabar yuborish (fire-and-forget)
@@ -377,7 +394,7 @@ export class ListingsService {
             title: listing.title,
             userId,
             userName: submitter?.displayName,
-        }).catch(() => {});
+        }).catch(() => { });
 
         return this.prisma.horseListing.findUnique({ where: { id } }) as Promise<HorseListing>;
     }

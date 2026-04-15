@@ -31,13 +31,28 @@ export class AdminService {
     // Dashboard stats
     async getDashboardStats() {
         const [
+            totalListings,
+            draftListings,
             pendingListings,
             approvedListings,
+            rejectedListings,
+            archivedListings,
+            soldListings,
             totalUsers,
             todayViews,
         ] = await Promise.all([
+            this.prisma.horseListing.count(),
+            this.prisma.horseListing.count({ where: { status: ListingStatus.DRAFT } }),
             this.prisma.horseListing.count({ where: { status: ListingStatus.PENDING } }),
             this.prisma.horseListing.count({ where: { status: ListingStatus.APPROVED } }),
+            this.prisma.horseListing.count({ where: { status: ListingStatus.REJECTED } }),
+            this.prisma.horseListing.count({ where: { status: ListingStatus.ARCHIVED } }),
+            this.prisma.horseListing.count({
+                where: {
+                    status: ListingStatus.ARCHIVED,
+                    saleSource: { not: null }
+                }
+            }),
             this.prisma.user.count(),
             this.prisma.viewLog.count({
                 where: {
@@ -47,8 +62,13 @@ export class AdminService {
         ]);
 
         return {
+            totalListings,
+            draftListings,
             pendingListings,
             approvedListings,
+            rejectedListings,
+            archivedListings,
+            soldListings,
             totalUsers,
             todayViews,
         };
@@ -328,6 +348,8 @@ export class AdminService {
                     isVerified: true,
                     isAdmin: true,
                     status: true,
+                    listingCredits: true,
+                    hasUnlimitedListings: true,
                     createdAt: true,
                     updatedAt: true,
                     lastLoginAt: true,
@@ -369,6 +391,49 @@ export class AdminService {
         });
 
         await this.createAuditLog(adminUserId, 'user.unban', 'User', userId);
+    }
+
+    async grantUnlimitedListings(userId: string, adminUserId: string) {
+        await this.requireAdmin(adminUserId);
+
+        await this.prisma.user.update({
+            where: { id: userId },
+            data: { hasUnlimitedListings: true },
+        });
+
+        await this.createAuditLog(adminUserId, 'user.grant_unlimited_listings', 'User', userId);
+
+        return { message: 'Cheksiz e\'lon yuklash huquqi berildi' };
+    }
+
+    async revokeUnlimitedListings(userId: string, adminUserId: string) {
+        await this.requireAdmin(adminUserId);
+
+        await this.prisma.user.update({
+            where: { id: userId },
+            data: { hasUnlimitedListings: false },
+        });
+
+        await this.createAuditLog(adminUserId, 'user.revoke_unlimited_listings', 'User', userId);
+
+        return { message: 'Cheksiz e\'lon yuklash huquqi bekor qilindi' };
+    }
+
+    async addListingCredits(userId: string, adminUserId: string, amount: number) {
+        await this.requireAdmin(adminUserId);
+
+        if (amount <= 0) {
+            throw new ForbiddenException('Kredit miqdori musbat bo\'lishi kerak');
+        }
+
+        await this.prisma.user.update({
+            where: { id: userId },
+            data: { listingCredits: { increment: amount } },
+        });
+
+        await this.createAuditLog(adminUserId, 'user.add_credits', 'User', userId, { amount });
+
+        return { message: `${amount} ta e'lon krediti qo'shildi` };
     }
 
     // Audit log

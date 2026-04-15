@@ -70,12 +70,13 @@ interface UserMeResponse {
     phone?: string;
     isAdmin: boolean;
     listingCredits: number;
+    hasUnlimitedListings: boolean;
 }
 
 @ApiTags('Autentifikatsiya')
 @Controller('auth')
 export class AuthController {
-    constructor(private readonly authService: AuthService) {}
+    constructor(private readonly authService: AuthService) { }
 
     @Post('admin/login')
     @HttpCode(HttpStatus.OK)
@@ -413,6 +414,7 @@ export class AuthController {
                 phone: user.phone ? `${user.phone.substring(0, 4)}****` : undefined,
                 isAdmin: user.isAdmin,
                 listingCredits: user.listingCredits,
+                hasUnlimitedListings: user.hasUnlimitedListings,
             },
             message: 'User information retrieved successfully',
             timestamp: new Date().toISOString(),

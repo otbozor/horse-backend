@@ -94,6 +94,52 @@ export class AdminController {
         };
     }
 
+    @Post('users/:id/grant-unlimited-listings')
+    @ApiOperation({ summary: 'Grant unlimited listings to a user' })
+    async grantUnlimitedListings(
+        @CurrentUser() user: User,
+        @Param('id') userId: string,
+    ): Promise<ApiResponse<any>> {
+        const result = await this.adminService.grantUnlimitedListings(userId, user.id);
+        return {
+            success: true,
+            data: null,
+            message: result.message,
+            timestamp: new Date().toISOString(),
+        };
+    }
+
+    @Post('users/:id/revoke-unlimited-listings')
+    @ApiOperation({ summary: 'Revoke unlimited listings from a user' })
+    async revokeUnlimitedListings(
+        @CurrentUser() user: User,
+        @Param('id') userId: string,
+    ): Promise<ApiResponse<any>> {
+        const result = await this.adminService.revokeUnlimitedListings(userId, user.id);
+        return {
+            success: true,
+            data: null,
+            message: result.message,
+            timestamp: new Date().toISOString(),
+        };
+    }
+
+    @Post('users/:id/add-credits')
+    @ApiOperation({ summary: 'Add listing credits to a user' })
+    async addListingCredits(
+        @CurrentUser() user: User,
+        @Param('id') userId: string,
+        @Body() body: { amount: number },
+    ): Promise<ApiResponse<any>> {
+        const result = await this.adminService.addListingCredits(userId, user.id, body.amount);
+        return {
+            success: true,
+            data: null,
+            message: result.message,
+            timestamp: new Date().toISOString(),
+        };
+    }
+
     @Get('audit-logs')
     @ApiOperation({ summary: 'Get audit logs' })
     async getAuditLogs(
