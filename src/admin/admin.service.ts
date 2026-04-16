@@ -82,7 +82,7 @@ export class AdminService {
             this.prisma.$queryRaw<RegionRow[]>`
                 SELECT region_id, COUNT(*) as count
                 FROM horse_listings
-                WHERE region_id IS NOT NULL
+                WHERE region_id IS NOT NULL AND status = 'APPROVED'
                 GROUP BY region_id
                 ORDER BY count DESC
                 LIMIT 10
@@ -90,7 +90,7 @@ export class AdminService {
             this.prisma.$queryRaw<RegionRow[]>`
                 SELECT region_id, COUNT(*) as count
                 FROM products
-                WHERE region_id IS NOT NULL
+                WHERE region_id IS NOT NULL AND status = 'PUBLISHED'
                 GROUP BY region_id
                 ORDER BY count DESC
                 LIMIT 10

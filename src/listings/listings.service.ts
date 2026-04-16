@@ -274,7 +274,14 @@ export class ListingsService {
             throw new NotFoundException('Listing not found');
         }
 
-        if (listing.userId !== userId) {
+        // Check if user is admin
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { isAdmin: true },
+        });
+
+        // Allow if user owns the listing OR user is admin
+        if (listing.userId !== userId && !user?.isAdmin) {
             throw new ForbiddenException('You can only edit your own listings');
         }
 
@@ -295,7 +302,8 @@ export class ListingsService {
             where: { id },
             data: {
                 ...dto,
-                status: ListingStatus.DRAFT,
+                // Admin tahrirlasa status o'zgarmaydi, oddiy user tahrirlasa DRAFT bo'ladi
+                ...(user?.isAdmin ? {} : { status: ListingStatus.DRAFT }),
             },
         });
     }
@@ -310,7 +318,14 @@ export class ListingsService {
             throw new NotFoundException('Listing not found');
         }
 
-        if (listing.userId !== userId) {
+        // Check if user is admin
+        const currentUser = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { isAdmin: true, listingCredits: true, hasUnlimitedListings: true },
+        });
+
+        // Allow if user owns the listing OR user is admin
+        if (listing.userId !== userId && !currentUser?.isAdmin) {
             throw new ForbiddenException('You can only submit your own listings');
         }
 
@@ -337,26 +352,8 @@ export class ListingsService {
                 },
             });
         } else {
-            // First-time submission — check and deduct credit
-            const user = await this.prisma.user.findUnique({
-                where: { id: userId },
-                select: { listingCredits: true, hasUnlimitedListings: true },
-            });
-
-            if (!user) {
-                throw new NotFoundException('User not found');
-            }
-
-            // Admin tomonidan cheksiz e'lon yuklash huquqi berilgan userlar uchun kredit tekshirilmaydi
-            if (!user.hasUnlimitedListings && user.listingCredits <= 0) {
-                throw new HttpException(
-                    { requiresPayment: true, listingId: id },
-                    HttpStatus.PAYMENT_REQUIRED,
-                );
-            }
-
-            // Cheksiz huquqi bo'lgan userlar uchun kredit kamaytirilmaydi
-            if (user.hasUnlimitedListings) {
+            // Admin submits someone else's listing — no credit check
+            if (currentUser?.isAdmin && listing.userId !== userId) {
                 await this.prisma.horseListing.update({
                     where: { id },
                     data: {
@@ -366,21 +363,51 @@ export class ListingsService {
                     },
                 });
             } else {
-                // Oddiy userlar uchun 1 kredit kamaytiriladi
-                await this.prisma.$transaction([
-                    this.prisma.user.update({
-                        where: { id: userId },
-                        data: { listingCredits: { decrement: 1 } },
-                    }),
-                    this.prisma.horseListing.update({
+                // First-time submission — check and deduct credit
+                const user = await this.prisma.user.findUnique({
+                    where: { id: listing.userId },
+                    select: { listingCredits: true, hasUnlimitedListings: true },
+                });
+
+                if (!user) {
+                    throw new NotFoundException('User not found');
+                }
+
+                // Admin tomonidan cheksiz e'lon yuklash huquqi berilgan userlar uchun kredit tekshirilmaydi
+                if (!user.hasUnlimitedListings && user.listingCredits <= 0) {
+                    throw new HttpException(
+                        { requiresPayment: true, listingId: id },
+                        HttpStatus.PAYMENT_REQUIRED,
+                    );
+                }
+
+                // Cheksiz huquqi bo'lgan userlar uchun kredit kamaytirilmaydi
+                if (user.hasUnlimitedListings) {
+                    await this.prisma.horseListing.update({
                         where: { id },
                         data: {
                             status: ListingStatus.PENDING,
                             isPaid: true,
                             hasVideo: listing.media.some((m) => m.type === 'VIDEO'),
                         },
-                    }),
-                ]);
+                    });
+                } else {
+                    // Oddiy userlar uchun 1 kredit kamaytiriladi
+                    await this.prisma.$transaction([
+                        this.prisma.user.update({
+                            where: { id: listing.userId },
+                            data: { listingCredits: { decrement: 1 } },
+                        }),
+                        this.prisma.horseListing.update({
+                            where: { id },
+                            data: {
+                                status: ListingStatus.PENDING,
+                                isPaid: true,
+                                hasVideo: listing.media.some((m) => m.type === 'VIDEO'),
+                            },
+                        }),
+                    ]);
+                }
             }
         }
 
@@ -416,7 +443,14 @@ export class ListingsService {
             throw new NotFoundException('Listing not found');
         }
 
-        if (listing.userId !== userId) {
+        // Check if user is admin
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { isAdmin: true },
+        });
+
+        // Allow if user owns the listing OR user is admin
+        if (listing.userId !== userId && !user?.isAdmin) {
             throw new ForbiddenException('You can only view your own listings');
         }
 
@@ -456,7 +490,14 @@ export class ListingsService {
             throw new NotFoundException('Listing not found');
         }
 
-        if (listing.userId !== userId) {
+        // Check if user is admin
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { isAdmin: true },
+        });
+
+        // Allow if user owns the listing OR user is admin
+        if (listing.userId !== userId && !user?.isAdmin) {
             throw new ForbiddenException('You can only archive your own listings');
         }
 

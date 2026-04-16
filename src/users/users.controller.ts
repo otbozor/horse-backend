@@ -24,14 +24,20 @@ export class UsersController {
     @ApiOperation({ summary: 'Update own profile' })
     async updateProfile(
         @CurrentUser() user: User,
-        @Body() body: { displayName?: string },
+        @Body() body: { displayName?: string; phone?: string; telegramUsername?: string },
     ): Promise<ApiResponse<any>> {
         const updated = await this.usersService.update(user.id, {
             displayName: body.displayName,
+            phone: body.phone,
+            telegramUsername: body.telegramUsername,
         });
         return {
             success: true,
-            data: { displayName: updated.displayName },
+            data: {
+                displayName: updated.displayName,
+                phone: updated.phone,
+                telegramUsername: updated.telegramUsername,
+            },
             message: 'Profile updated successfully',
             timestamp: new Date().toISOString(),
         };

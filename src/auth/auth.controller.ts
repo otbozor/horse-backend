@@ -68,6 +68,7 @@ interface UserMeResponse {
     avatarUrl?: string;
     isVerified: boolean;
     phone?: string;
+    telegramUsername?: string;
     isAdmin: boolean;
     listingCredits: number;
     hasUnlimitedListings: boolean;
@@ -411,7 +412,8 @@ export class AuthController {
                 displayName: user.displayName,
                 avatarUrl: user.avatarUrl || undefined,
                 isVerified: user.isVerified,
-                phone: user.phone ? `${user.phone.substring(0, 4)}****` : undefined,
+                phone: user.phone || undefined,
+                telegramUsername: user.telegramUsername || undefined,
                 isAdmin: user.isAdmin,
                 listingCredits: user.listingCredits,
                 hasUnlimitedListings: user.hasUnlimitedListings,
