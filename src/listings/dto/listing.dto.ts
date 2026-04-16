@@ -75,9 +75,107 @@ export class CreateListingDto {
     @IsOptional()
     @IsBoolean()
     hasVaccine?: boolean;
+
+    @ApiPropertyOptional({ description: 'Contact name for this listing' })
+    @IsOptional()
+    @IsString()
+    contactName?: string;
+
+    @ApiPropertyOptional({ description: 'Contact phone for this listing' })
+    @IsOptional()
+    @IsString()
+    contactPhone?: string;
+
+    @ApiPropertyOptional({ description: 'Contact telegram for this listing' })
+    @IsOptional()
+    @IsString()
+    contactTelegram?: string;
 }
 
-export class UpdateListingDto extends CreateListingDto { }
+export class UpdateListingDto {
+    @ApiPropertyOptional({ description: 'Listing title' })
+    @IsOptional()
+    @IsString()
+    title?: string;
+
+    @ApiPropertyOptional({ description: 'Listing description' })
+    @IsOptional()
+    @IsString()
+    description?: string;
+
+    @ApiPropertyOptional({ description: 'Region ID' })
+    @IsOptional()
+    @IsUUID()
+    regionId?: string;
+
+    @ApiPropertyOptional({ description: 'District ID' })
+    @IsOptional()
+    @IsUUID()
+    districtId?: string;
+
+    @ApiPropertyOptional({ enum: HorsePurpose })
+    @IsOptional()
+    @IsEnum(HorsePurpose)
+    purpose?: HorsePurpose;
+
+    @ApiPropertyOptional({ enum: HorseGender })
+    @IsOptional()
+    @IsEnum(HorseGender)
+    gender?: HorseGender;
+
+    @ApiPropertyOptional({ description: 'Breed ID' })
+    @IsOptional()
+    @IsUUID()
+    breedId?: string;
+
+    @ApiPropertyOptional({ description: 'Age in years' })
+    @IsOptional()
+    @IsNumber()
+    @Min(0)
+    @Max(40)
+    ageYears?: number;
+
+    @ApiPropertyOptional({ description: 'Horse color' })
+    @IsOptional()
+    @IsString()
+    color?: string;
+
+    @ApiPropertyOptional({ description: 'Price amount' })
+    @IsOptional()
+    @IsNumber()
+    @Min(0)
+    priceAmount?: number;
+
+    @ApiPropertyOptional({ enum: Currency, default: 'UZS' })
+    @IsOptional()
+    @IsEnum(Currency)
+    priceCurrency?: Currency;
+
+    @ApiPropertyOptional({ description: 'Has passport document' })
+    @IsOptional()
+    @IsBoolean()
+    hasPassport?: boolean;
+
+    @ApiPropertyOptional({ description: 'Has vaccine' })
+    @IsOptional()
+    @IsBoolean()
+    hasVaccine?: boolean;
+
+    @ApiPropertyOptional({ description: 'Contact name for this listing' })
+    @IsOptional()
+    @IsString()
+    contactName?: string;
+
+    @ApiPropertyOptional({ description: 'Contact phone for this listing' })
+    @IsOptional()
+    @IsString()
+    contactPhone?: string;
+
+    @ApiPropertyOptional({ description: 'Contact telegram for this listing' })
+    @IsOptional()
+    @IsString()
+    contactTelegram?: string;
+}
 
 export class ListingsFilterDto {
     @ApiPropertyOptional()

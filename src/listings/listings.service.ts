@@ -243,6 +243,12 @@ export class ListingsService {
         const baseSlug = slugify(dto.title, { lower: true, strict: true });
         const slug = `${baseSlug}-${uuidv4().substring(0, 8)}`;
 
+        // User'ning hozirgi ma'lumotlarini olish (default qiymat sifatida)
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            select: { displayName: true, phone: true, telegramUsername: true },
+        });
+
         return this.prisma.horseListing.create({
             data: {
                 userId,
@@ -260,6 +266,10 @@ export class ListingsService {
                 priceCurrency: dto.priceCurrency || 'UZS',
                 hasPassport: dto.hasPassport || false,
                 hasVaccine: dto.hasVaccine,
+                // E'lon uchun alohida aloqa ma'lumotlari
+                contactName: dto.contactName || user?.displayName,
+                contactPhone: dto.contactPhone || user?.phone,
+                contactTelegram: dto.contactTelegram || user?.telegramUsername,
                 status: ListingStatus.DRAFT,
             },
         });
@@ -298,13 +308,36 @@ export class ListingsService {
             throw new ForbiddenException('Can only edit draft, rejected, expired, archived, pending or approved listings');
         }
 
+        // Faqat berilgan maydonlarni yangilash (undefined maydonlarni o'tkazib yuborish)
+        const updateData: any = {};
+
+        if (dto.title !== undefined) updateData.title = dto.title;
+        if (dto.description !== undefined) updateData.description = dto.description;
+        if (dto.regionId !== undefined) updateData.regionId = dto.regionId;
+        if (dto.districtId !== undefined) updateData.districtId = dto.districtId;
+        if (dto.purpose !== undefined) updateData.purpose = dto.purpose;
+        if (dto.gender !== undefined) updateData.gender = dto.gender;
+        if (dto.breedId !== undefined) updateData.breedId = dto.breedId;
+        if (dto.ageYears !== undefined) updateData.ageYears = dto.ageYears;
+        if (dto.color !== undefined) updateData.color = dto.color;
+        if (dto.priceAmount !== undefined) updateData.priceAmount = dto.priceAmount;
+        if (dto.priceCurrency !== undefined) updateData.priceCurrency = dto.priceCurrency;
+        if (dto.hasPassport !== undefined) updateData.hasPassport = dto.hasPassport;
+        if (dto.hasVaccine !== undefined) updateData.hasVaccine = dto.hasVaccine;
+
+        // Bog'lanish ma'lumotlari - faqat kiritilgan bo'lsa yangilanadi
+        if (dto.contactName !== undefined) updateData.contactName = dto.contactName;
+        if (dto.contactPhone !== undefined) updateData.contactPhone = dto.contactPhone;
+        if (dto.contactTelegram !== undefined) updateData.contactTelegram = dto.contactTelegram;
+
+        // Admin tahrirlasa status o'zgarmaydi, oddiy user tahrirlasa DRAFT bo'ladi
+        if (!user?.isAdmin) {
+            updateData.status = ListingStatus.DRAFT;
+        }
+
         return this.prisma.horseListing.update({
             where: { id },
-            data: {
-                ...dto,
-                // Admin tahrirlasa status o'zgarmaydi, oddiy user tahrirlasa DRAFT bo'ladi
-                ...(user?.isAdmin ? {} : { status: ListingStatus.DRAFT }),
-            },
+            data: updateData,
         });
     }
 

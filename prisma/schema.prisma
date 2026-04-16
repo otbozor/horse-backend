@@ -1,5 +1,3 @@
-// @ts-check
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,50 +7,31 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// ============================================
-// USER & AUTH
-// ============================================
-
-enum UserStatus {
-  ACTIVE
-  BANNED
-  DELETED
-}
-
 model User {
-  id               String     @id @default(uuid())
-  
-  // Telegram auth
-  telegramUserId   BigInt?    @unique @map("telegram_user_id")
-  telegramUsername String?    @map("telegram_username")
-  phone            String?    
-  
-  // Admin auth
-  username         String?    @unique
-  password         String?    // bcrypt hashed
-  isAdmin          Boolean    @default(false) @map("is_admin")
-  
-  displayName      String     @map("display_name")
-  avatarUrl        String?    @map("avatar_url")
-  isVerified       Boolean    @default(false) @map("is_verified")
-  status           UserStatus @default(ACTIVE)
-  
-  listingCredits   Int        @default(3) @map("listing_credits")
-  hasUnlimitedListings Boolean @default(false) @map("has_unlimited_listings")
-
-  createdAt        DateTime   @default(now()) @map("created_at")
-  updatedAt        DateTime   @updatedAt @map("updated_at")
-  lastLoginAt      DateTime?  @map("last_login_at")
-
-  // Relations
-  listings         HorseListing[]
-  products         Product[]
-  favorites        Favorite[]
-  productFavorites ProductFavorite[]
-  viewLogs         ViewLog[]
-  auditLogs        AuditLog[]
-  payments         Payment[]
-  comments         Comment[]
+  id                   String            @id @default(uuid())
+  telegramUserId       BigInt?           @unique @map("telegram_user_id")
+  telegramUsername     String?           @map("telegram_username")
+  phone                String?
+  username             String?           @unique
+  password             String?
+  isAdmin              Boolean           @default(false) @map("is_admin")
+  displayName          String            @map("display_name")
+  avatarUrl            String?           @map("avatar_url")
+  isVerified           Boolean           @default(false) @map("is_verified")
+  status               UserStatus        @default(ACTIVE)
+  createdAt            DateTime          @default(now()) @map("created_at")
+  updatedAt            DateTime          @updatedAt @map("updated_at")
+  lastLoginAt          DateTime?         @map("last_login_at")
+  listingCredits       Int               @default(3) @map("listing_credits")
+  hasUnlimitedListings Boolean           @default(false) @map("has_unlimited_listings")
+  auditLogs            AuditLog[]
+  comments             Comment[]
+  favorites            Favorite[]
+  listings             HorseListing[]
+  payments             Payment[]
+  productFavorites     ProductFavorite[]
+  products             Product[]
+  viewLogs             ViewLog[]
 
   @@map("users")
 }
@@ -69,9 +48,9 @@ model RefreshToken {
 }
 
 model TelegramAuthSession {
-  id        String   @id               // sessionId yoki "code:XXXXXXXX"
-  type      String                     // 'SESSION' yoki 'CODE'
-  data      String                     // returnUrl (SESSION) yoki userId (CODE)
+  id        String   @id
+  type      String
+  data      String
   expiresAt DateTime @map("expires_at")
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -79,54 +58,330 @@ model TelegramAuthSession {
   @@map("telegram_auth_sessions")
 }
 
-// ============================================
-// LOCATION
-// ============================================
-
 model Region {
-  id       String     @id @default(uuid())
-  nameUz   String     @map("name_uz")
-  nameRu   String?    @map("name_ru")
-  slug     String     @unique
-
+  id        String         @id @default(uuid())
+  nameUz    String         @map("name_uz")
+  nameRu    String?        @map("name_ru")
+  slug      String         @unique
   districts District[]
-  listings  HorseListing[]
   events    Event[]
+  listings  HorseListing[]
   products  Product[]
 
   @@map("regions")
 }
 
 model District {
-  id       String  @id @default(uuid())
-  regionId String  @map("region_id")
-  nameUz   String  @map("name_uz")
-  nameRu   String? @map("name_ru")
-  slug     String  @unique
-
-  region   Region  @relation(fields: [regionId], references: [id], onDelete: Cascade)
-  listings HorseListing[]
+  id       String         @id @default(uuid())
+  regionId String         @map("region_id")
+  nameUz   String         @map("name_uz")
+  nameRu   String?        @map("name_ru")
+  slug     String         @unique
+  region   Region         @relation(fields: [regionId], references: [id], onDelete: Cascade)
   events   Event[]
+  listings HorseListing[]
   products Product[]
 
   @@index([regionId])
   @@map("districts")
 }
 
-// ============================================
-// HORSE LISTINGS
-// ============================================
-
 model Breed {
-  id          String  @id @default(uuid())
-  name        String  @unique
-  slug        String  @unique
+  id          String         @id @default(uuid())
+  name        String         @unique
+  slug        String         @unique
   description String?
-  isActive    Boolean @default(true) @map("is_active")
-
+  isActive    Boolean        @default(true) @map("is_active")
   listings    HorseListing[]
 
   @@map("breeds")
+}
+
+model HorseListing {
+  id             String        @id @default(uuid())
+  userId         String        @map("user_id")
+  title          String
+  slug           String        @unique
+  description    String?
+  regionId       String        @map("region_id")
+  districtId     String?       @map("district_id")
+  purpose        HorsePurpose?
+  gender         HorseGender?
+  breedId        String?       @map("breed_id")
+  ageYears       Int?          @map("age_years")
+  color          String?
+  priceAmount    Decimal       @map("price_amount") @db.Decimal(15, 2)
+  priceCurrency  Currency      @default(UZS) @map("price_currency")
+  hasPassport    Boolean       @default(false) @map("has_passport")
+  hasVaccine     Boolean?      @map("has_vaccine")
+  hasVideo       Boolean       @default(false) @map("has_video")
+  status         ListingStatus @default(DRAFT)
+  rejectReason   String?       @map("reject_reason")
+  viewCount      Int           @default(0) @map("view_count")
+  favoriteCount  Int           @default(0) @map("favorite_count")
+  publishedAt    DateTime?     @map("published_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  isPaid         Boolean       @default(false) @map("is_paid")
+  isTop          Boolean       @default(false) @map("is_top")
+  expiresAt      DateTime?     @map("expires_at")
+  boostExpiresAt DateTime?     @map("boost_expires_at")
+  isPremium      Boolean       @default(false) @map("is_premium")
+  saleSource     SaleSource?   @map("sale_source")
+  contactName    String?       @map("contact_name")
+  contactPhone   String?       @map("contact_phone")
+  contactTelegram String?      @map("contact_telegram")
+  comments       Comment[]
+  favorites      Favorite[]
+  breed          Breed?        @relation(fields: [breedId], references: [id])
+  district       District?     @relation(fields: [districtId], references: [id])
+  region         Region        @relation(fields: [regionId], references: [id])
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  media          HorseMedia[]
+  payments       Payment[]
+  viewLogs       ViewLog[]
+
+  @@index([userId])
+  @@index([regionId])
+  @@index([status])
+  @@index([publishedAt])
+  @@map("horse_listings")
+}
+
+model HorseMedia {
+  id        String       @id @default(uuid())
+  listingId String       @map("listing_id")
+  type      MediaType    @default(IMAGE)
+  url       String
+  thumbUrl  String?      @map("thumb_url")
+  sortOrder Int          @default(0) @map("sort_order")
+  createdAt DateTime     @default(now()) @map("created_at")
+  listing   HorseListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@map("horse_media")
+}
+
+model Favorite {
+  id        String       @id @default(uuid())
+  userId    String       @map("user_id")
+  listingId String       @map("listing_id")
+  createdAt DateTime     @default(now()) @map("created_at")
+  listing   HorseListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listingId])
+  @@index([userId])
+  @@map("favorites")
+}
+
+model ViewLog {
+  id        String       @id @default(uuid())
+  listingId String       @map("listing_id")
+  userId    String?      @map("user_id")
+  sessionId String?      @map("session_id")
+  createdAt DateTime     @default(now()) @map("created_at")
+  listing   HorseListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  user      User?        @relation(fields: [userId], references: [id])
+
+  @@index([listingId])
+  @@index([userId])
+  @@map("view_logs")
+}
+
+model Comment {
+  id        String       @id @default(uuid())
+  listingId String       @map("listing_id")
+  userId    String       @map("user_id")
+  content   String
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+  parentId  String?      @map("parent_id")
+  listing   HorseListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  parent    Comment?     @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies   Comment[]    @relation("CommentReplies")
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@index([userId])
+  @@index([parentId])
+  @@map("comments")
+}
+
+model Event {
+  id              String      @id @default(uuid())
+  title           String
+  slug            String      @unique
+  description     String?
+  regionId        String      @map("region_id")
+  districtId      String?     @map("district_id")
+  addressText     String?     @map("address_text")
+  mapUrl          String?     @map("map_url")
+  startsAt        DateTime    @map("starts_at")
+  endsAt          DateTime?   @map("ends_at")
+  organizerName   String      @map("organizer_name")
+  contactPhone    String?     @map("contact_phone")
+  contactTelegram String?     @map("contact_telegram")
+  prizePool       String?     @map("prize_pool")
+  prizeCurrency   Currency    @default(UZS) @map("prize_currency")
+  rules           String?
+  status          EventStatus @default(DRAFT)
+  viewCount       Int         @default(0) @map("view_count")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+  publishedAt     DateTime?   @map("published_at")
+  district        District?   @relation(fields: [districtId], references: [id])
+  region          Region      @relation(fields: [regionId], references: [id])
+
+  @@index([regionId])
+  @@index([status])
+  @@index([startsAt])
+  @@map("events")
+}
+
+model ProductCategory {
+  id       String    @id @default(uuid())
+  name     String
+  slug     String    @unique
+  products Product[]
+
+  @@map("product_categories")
+}
+
+model Product {
+  id               String            @id @default(uuid())
+  title            String
+  slug             String            @unique
+  categoryId       String?           @map("category_id")
+  description      String?
+  priceAmount      Decimal           @map("price_amount") @db.Decimal(15, 2)
+  priceCurrency    Currency          @default(UZS) @map("price_currency")
+  hasDelivery      Boolean           @default(false) @map("has_delivery")
+  stockStatus      StockStatus       @default(IN_STOCK) @map("stock_status")
+  status           ProductStatus     @default(DRAFT)
+  viewCount        Int               @default(0) @map("view_count")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  publishedAt      DateTime?         @map("published_at")
+  userId           String?           @map("user_id")
+  isPaid           Boolean           @default(false) @map("is_paid")
+  districtId       String?           @map("district_id")
+  favoriteCount    Int               @default(0) @map("favorite_count")
+  regionId         String?           @map("region_id")
+  payments         Payment[]
+  productFavorites ProductFavorite[]
+  media            ProductMedia[]
+  category         ProductCategory?  @relation(fields: [categoryId], references: [id])
+  district         District?         @relation(fields: [districtId], references: [id])
+  region           Region?           @relation(fields: [regionId], references: [id])
+  user             User?             @relation(fields: [userId], references: [id])
+
+  @@index([categoryId])
+  @@index([userId])
+  @@index([regionId])
+  @@index([status])
+  @@index([publishedAt])
+  @@map("products")
+}
+
+model ProductFavorite {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  productId String   @map("product_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@index([userId])
+  @@map("product_favorites")
+}
+
+model ProductMedia {
+  id        String   @id @default(uuid())
+  productId String   @map("product_id")
+  url       String
+  thumbUrl  String?  @map("thumb_url")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("product_media")
+}
+
+model BlogPost {
+  id          String         @id @default(uuid())
+  title       String
+  slug        String         @unique
+  excerpt     String?
+  content     String
+  coverImage  String?        @map("cover_image")
+  authorId    String         @map("author_id")
+  status      BlogPostStatus @default(DRAFT)
+  viewCount   Int            @default(0) @map("view_count")
+  publishedAt DateTime?      @map("published_at")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+  keywords    String?
+
+  @@index([status])
+  @@index([publishedAt])
+  @@map("blog_posts")
+}
+
+model Payment {
+  id                String          @id @default(uuid())
+  listingId         String?         @map("listing_id")
+  userId            String          @map("user_id")
+  packageType       PaymentPackage? @map("package_type")
+  amount            Decimal         @map("amount") @db.Decimal(15, 2)
+  status            PaymentStatus   @default(PENDING)
+  clickTransId      String?         @map("click_trans_id")
+  clickPaydocId     String?         @map("click_paydoc_id")
+  merchantPrepareId Int             @default(0) @map("merchant_prepare_id")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  productId         String?         @map("product_id")
+  listingBundleSize Int?            @map("listing_bundle_size")
+  listing           HorseListing?   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  product           Product?        @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@index([productId])
+  @@index([userId])
+  @@index([status])
+  @@map("payments")
+}
+
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorUserId String?  @map("actor_user_id")
+  action      String
+  entityType  String   @map("entity_type")
+  entityId    String   @map("entity_id")
+  diffJson    Json?    @map("diff_json")
+  createdAt   DateTime @default(now()) @map("created_at")
+  actor       User?    @relation(fields: [actorUserId], references: [id])
+
+  @@index([actorUserId])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+enum UserStatus {
+  ACTIVE
+  BANNED
+  DELETED
 }
 
 enum HorsePurpose {
@@ -163,202 +418,16 @@ enum Currency {
   USD
 }
 
-model HorseListing {
-  id            String        @id @default(uuid())
-  userId        String        @map("user_id")
-  title         String
-  slug          String        @unique
-  description   String?
-  
-  regionId      String        @map("region_id")
-  districtId    String?       @map("district_id")
-  
-  purpose       HorsePurpose?
-  gender        HorseGender?
-  breedId       String?       @map("breed_id")
-  ageYears      Int?          @map("age_years")
-  color         String?
-  
-  priceAmount   Decimal       @map("price_amount") @db.Decimal(15, 2)
-  priceCurrency Currency      @default(UZS) @map("price_currency")
-  
-  hasPassport   Boolean       @default(false) @map("has_passport")
-  hasVaccine    Boolean?      @map("has_vaccine")
-  hasVideo      Boolean       @default(false) @map("has_video")
-  
-  status        ListingStatus @default(DRAFT)
-  isPaid        Boolean       @default(false) @map("is_paid")
-  isTop         Boolean       @default(false) @map("is_top")
-  isPremium     Boolean       @default(false) @map("is_premium")
-  rejectReason  String?       @map("reject_reason")
-  saleSource    SaleSource?   @map("sale_source")
-  
-  viewCount     Int           @default(0) @map("view_count")
-  favoriteCount Int           @default(0) @map("favorite_count")
-  
-  publishedAt   DateTime?     @map("published_at")
-  expiresAt     DateTime?     @map("expires_at")
-  boostExpiresAt DateTime?    @map("boost_expires_at")
-  createdAt     DateTime      @default(now()) @map("created_at")
-  updatedAt     DateTime      @updatedAt @map("updated_at")
-
-  // Relations
-  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  region        Region        @relation(fields: [regionId], references: [id])
-  district      District?     @relation(fields: [districtId], references: [id])
-  breed         Breed?        @relation(fields: [breedId], references: [id])
-  media         HorseMedia[]
-  favorites     Favorite[]
-  viewLogs      ViewLog[]
-  payments      Payment[]
-  comments      Comment[]
-
-  @@index([userId])
-  @@index([regionId])
-  @@index([status])
-  @@index([publishedAt])
-  @@map("horse_listings")
-}
-
 enum MediaType {
   IMAGE
   VIDEO
 }
-
-model HorseMedia {
-  id        String    @id @default(uuid())
-  listingId String    @map("listing_id")
-  type      MediaType @default(IMAGE)
-  url       String
-  thumbUrl  String?   @map("thumb_url")
-  sortOrder Int       @default(0) @map("sort_order")
-  createdAt DateTime  @default(now()) @map("created_at")
-
-  listing   HorseListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
-
-  @@index([listingId])
-  @@map("horse_media")
-}
-
-// ============================================
-// USER INTERACTIONS
-// ============================================
-
-model Favorite {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  listingId String   @map("listing_id")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  listing   HorseListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, listingId])
-  @@index([userId])
-  @@map("favorites")
-}
-
-model ViewLog {
-  id            String   @id @default(uuid())
-  listingId     String   @map("listing_id")
-  userId        String?  @map("user_id")
-  sessionId     String?  @map("session_id")
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  listing       HorseListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  user          User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([listingId])
-  @@index([userId])
-  @@map("view_logs")
-}
-
-// ============================================
-// COMMENTS
-// ============================================
-
-model Comment {
-  id        String   @id @default(uuid())
-  listingId String   @map("listing_id")
-  userId    String   @map("user_id")
-  parentId  String?  @map("parent_id")
-  content   String   @db.Text
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  listing   HorseListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parent    Comment?     @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
-  replies   Comment[]    @relation("CommentReplies")
-
-  @@index([listingId])
-  @@index([userId])
-  @@index([parentId])
-  @@map("comments")
-}
-
-// ============================================
-// EVENTS (KOPKARI)
-// ============================================
 
 enum EventStatus {
   DRAFT
   PUBLISHED
   CANCELLED
   COMPLETED
-}
-
-model Event {
-  id              String      @id @default(uuid())
-  title           String
-  slug            String      @unique
-  description     String?     @db.Text
-  
-  regionId        String      @map("region_id")
-  districtId      String?     @map("district_id")
-  addressText     String?     @map("address_text")
-  mapUrl          String?     @map("map_url")
-  
-  startsAt        DateTime    @map("starts_at")
-  endsAt          DateTime?   @map("ends_at")
-  
-  organizerName   String      @map("organizer_name")
-  contactPhone    String?     @map("contact_phone")
-  contactTelegram String?     @map("contact_telegram")
-  
-  prizePool       String?     @map("prize_pool")
-  prizeCurrency   Currency    @default(UZS) @map("prize_currency")
-  rules           String?     @db.Text
-  
-  status          EventStatus @default(DRAFT)
-  viewCount       Int         @default(0) @map("view_count")
-  
-  createdAt       DateTime    @default(now()) @map("created_at")
-  updatedAt       DateTime    @updatedAt @map("updated_at")
-  publishedAt     DateTime?   @map("published_at")
-
-  // Relations
-  region          Region      @relation(fields: [regionId], references: [id])
-  district        District?   @relation(fields: [districtId], references: [id])
-
-  @@index([regionId])
-  @@index([status])
-  @@index([startsAt])
-  @@map("events")
-}
-
-// ============================================
-// PRODUCTS
-// ============================================
-
-model ProductCategory {
-  id       String    @id @default(uuid())
-  name     String
-  slug     String    @unique
-  
-  products Product[]
-
-  @@map("product_categories")
 }
 
 enum ProductStatus {
@@ -373,112 +442,11 @@ enum StockStatus {
   PREORDER
 }
 
-model Product {
-  id            String        @id @default(uuid())
-  title         String
-  slug          String        @unique
-  categoryId    String?       @map("category_id")
-  userId        String?       @map("user_id")
-  description   String?       @db.Text
-
-  regionId      String?       @map("region_id")
-  districtId    String?       @map("district_id")
-
-  priceAmount   Decimal       @map("price_amount") @db.Decimal(15, 2)
-  priceCurrency Currency      @default(UZS) @map("price_currency")
-
-  hasDelivery   Boolean       @default(false) @map("has_delivery")
-  stockStatus   StockStatus   @default(IN_STOCK) @map("stock_status")
-  status        ProductStatus @default(DRAFT)
-  isPaid        Boolean       @default(false) @map("is_paid")
-
-  viewCount     Int           @default(0) @map("view_count")
-  favoriteCount Int           @default(0) @map("favorite_count")
-
-  createdAt     DateTime      @default(now()) @map("created_at")
-  updatedAt     DateTime      @updatedAt @map("updated_at")
-  publishedAt   DateTime?     @map("published_at")
-
-  category      ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  user          User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
-  region        Region?          @relation(fields: [regionId], references: [id])
-  district      District?        @relation(fields: [districtId], references: [id])
-  media         ProductMedia[]
-  payments      Payment[]
-  productFavorites ProductFavorite[]
-
-  @@index([categoryId])
-  @@index([userId])
-  @@index([regionId])
-  @@index([status])
-  @@index([publishedAt])
-  @@map("products")
-}
-
-model ProductFavorite {
-  id        String   @id @default(uuid())
-  userId    String   @map("user_id")
-  productId String   @map("product_id")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, productId])
-  @@index([userId])
-  @@map("product_favorites")
-}
-
-model ProductMedia {
-  id        String   @id @default(uuid())
-  productId String   @map("product_id")
-  url       String
-  thumbUrl  String?  @map("thumb_url")
-  sortOrder Int      @default(0) @map("sort_order")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  @@index([productId])
-  @@map("product_media")
-}
-
-// ============================================
-// BLOG
-// ============================================
-
 enum BlogPostStatus {
   DRAFT
   PUBLISHED
   ARCHIVED
 }
-
-model BlogPost {
-  id            String         @id @default(uuid())
-  title         String
-  slug          String         @unique
-  excerpt       String?
-  content       String         @db.Text
-  coverImage    String?        @map("cover_image")
-  keywords      String?
-
-  authorId      String         @map("author_id")
-  
-  status        BlogPostStatus @default(DRAFT)
-  viewCount     Int            @default(0) @map("view_count")
-  
-  publishedAt   DateTime?      @map("published_at")
-  createdAt     DateTime       @default(now()) @map("created_at")
-  updatedAt     DateTime       @updatedAt @map("updated_at")
-
-  @@index([status])
-  @@index([publishedAt])
-  @@map("blog_posts")
-}
-
-// ============================================
-// PAYMENTS
-// ============================================
 
 enum PaymentStatus {
   PENDING
@@ -493,63 +461,13 @@ enum PaymentPackage {
   TURBO_SAVDO
 }
 
-model Payment {
-  id                  String          @id @default(uuid())
-  listingId           String?         @map("listing_id")
-  productId           String?         @map("product_id")
-  userId              String          @map("user_id")
-  packageType         PaymentPackage? @map("package_type")
-  listingBundleSize   Int?            @map("listing_bundle_size")
-  amount              Decimal         @map("amount") @db.Decimal(15, 2)
-  status              PaymentStatus   @default(PENDING)
-
-  // Click fields
-  clickTransId        String?         @map("click_trans_id")
-  clickPaydocId       String?         @map("click_paydoc_id")
-  merchantPrepareId   Int             @map("merchant_prepare_id") @default(0)
-
-  createdAt           DateTime        @default(now()) @map("created_at")
-  updatedAt           DateTime        @updatedAt @map("updated_at")
-
-  listing             HorseListing?   @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  product             Product?        @relation(fields: [productId], references: [id], onDelete: Cascade)
-  user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([listingId])
-  @@index([productId])
-  @@index([userId])
-  @@index([status])
-  @@map("payments")
-}
-
-// ============================================
-// APP SETTINGS
-// ============================================
-
-model AppSetting {
+model CacheEntry {
   key       String   @id
-  value     String
+  value     Json
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  @@map("app_settings")
-}
-
-// ============================================
-// ADMIN & AUDIT
-// ============================================
-
-model AuditLog {
-  id           String   @id @default(uuid())
-  actorUserId  String?  @map("actor_user_id")
-  action       String
-  entityType   String   @map("entity_type")
-  entityId     String   @map("entity_id")
-  diffJson     Json?    @map("diff_json")
-  createdAt    DateTime @default(now()) @map("created_at")
-
-  actor        User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
-
-  @@index([actorUserId])
-  @@index([entityType, entityId])
-  @@map("audit_logs")
+  @@index([expiresAt])
+  @@map("cache_entries")
 }
