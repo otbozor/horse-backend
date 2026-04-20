@@ -230,13 +230,20 @@ export class AdminService {
     async approveListing(listingId: string, adminUserId: string) {
         await this.requireAdmin(adminUserId);
 
+        // Check if this is first-time approval (publishedAt is null)
+        const existingListing = await this.prisma.horseListing.findUnique({
+            where: { id: listingId },
+            select: { publishedAt: true },
+        });
+        const isFirstTimeApproval = !existingListing?.publishedAt;
+
         const now = new Date();
         const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
         const listing = await this.prisma.horseListing.update({
             where: { id: listingId },
             data: {
                 status: ListingStatus.APPROVED,
-                publishedAt: now,
+                publishedAt: existingListing?.publishedAt || now, // Keep original publishedAt if exists
                 expiresAt,
             },
             include: { user: { select: { telegramUserId: true } } },
@@ -254,22 +261,24 @@ export class AdminService {
             ).catch(() => { });
         }
 
-        // Telegram kanalga e'lon yuborish (fire-and-forget)
-        const listingForChannel = await this.prisma.horseListing.findUnique({
-            where: { id: listingId },
-            include: {
-                region: { select: { nameUz: true } },
-                district: { select: { nameUz: true } },
-                breed: { select: { name: true } },
-                user: { select: { phone: true } },
-                media: {
-                    where: { type: 'IMAGE' },
-                    orderBy: { sortOrder: 'asc' },
+        // Telegram kanalga e'lon yuborish - FAQAT birinchi marta approve qilinganda
+        if (isFirstTimeApproval) {
+            const listingForChannel = await this.prisma.horseListing.findUnique({
+                where: { id: listingId },
+                include: {
+                    region: { select: { nameUz: true } },
+                    district: { select: { nameUz: true } },
+                    breed: { select: { name: true } },
+                    user: { select: { phone: true } },
+                    media: {
+                        where: { type: 'IMAGE' },
+                        orderBy: { sortOrder: 'asc' },
+                    },
                 },
-            },
-        });
-        if (listingForChannel) {
-            this.telegramNotify.postListingToChannel(listingForChannel).catch(() => { });
+            });
+            if (listingForChannel) {
+                this.telegramNotify.postListingToChannel(listingForChannel).catch(() => { });
+            }
         }
 
         const { user: _user, ...listingData } = listing;
@@ -293,6 +302,31 @@ export class AdminService {
         await this.createAuditLog(adminUserId, 'listing.delete', 'HorseListing', listingId);
 
         return { deleted: true };
+    }
+
+    async archiveListing(listingId: string, adminUserId: string, saleSource?: SaleSource) {
+        await this.requireAdmin(adminUserId);
+
+        const listing = await this.prisma.horseListing.findUnique({
+            where: { id: listingId },
+            select: { id: true, title: true },
+        });
+
+        if (!listing) {
+            throw new NotFoundException('Listing not found');
+        }
+
+        await this.prisma.horseListing.update({
+            where: { id: listingId },
+            data: {
+                status: ListingStatus.ARCHIVED,
+                ...(saleSource && { saleSource }),
+            },
+        });
+
+        await this.createAuditLog(adminUserId, 'listing.archive', 'HorseListing', listingId, { saleSource });
+
+        return { archived: true, saleSource };
     }
 
     async rejectListing(listingId: string, adminUserId: string, reason: string) {

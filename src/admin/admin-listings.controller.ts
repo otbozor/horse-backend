@@ -113,6 +113,23 @@ export class AdminListingsController {
         };
     }
 
+    @Post(':id/archive')
+    @ApiOperation({ summary: "E'lonni nofaol qilish (admin)" })
+    async archiveListing(
+        @CurrentUser() user: User,
+        @Param('id') id: string,
+        @Body() body: { saleSource?: 'OTBOZOR' | 'OTHER' },
+    ): Promise<ApiResponse<any>> {
+        await this.adminService.requireAdmin(user.id);
+        const data = await this.adminService.archiveListing(id, user.id, body.saleSource);
+        return {
+            success: true,
+            data,
+            message: "E'lon nofaol qilindi",
+            timestamp: new Date().toISOString(),
+        };
+    }
+
     @Post(':id/reject')
     @ApiOperation({ summary: 'Reject a listing' })
     async rejectListing(
