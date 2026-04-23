@@ -577,4 +577,43 @@ export class PaymentService {
             createdAt: payment.createdAt,
         };
     }
+
+    // Create invoice for boost package (for specific listing)
+    async createBoostPackageInvoice(userId: string, packageType: PaymentPackage, listingId?: string) {
+        console.log('createBoostPackageInvoice called with:', { userId, packageType, listingId });
+
+        const packagePrice = await this.getPackagePrice(packageType);
+        console.log('Package price:', packagePrice);
+
+        const amount = packagePrice.amount;
+
+        const payment = await this.prisma.payment.create({
+            data: {
+                userId,
+                packageType,
+                amount,
+                listingId,
+                status: PaymentStatus.PENDING,
+                merchantPrepareId: Math.floor(Math.random() * 2000000000) + 1,
+            },
+        });
+
+        console.log('Payment created:', payment.id);
+
+        const returnUrl = listingId
+            ? `${this.frontendUrl}/elon/${listingId}/reklama-natija?paymentId=${payment.id}`
+            : `${this.frontendUrl}/paketlar/natija?paymentId=${payment.id}`;
+        const clickUrl =
+            `https://my.click.uz/services/pay` +
+            `?service_id=${this.serviceId}` +
+            `&merchant_id=${this.merchantId}` +
+            `&amount=${amount}` +
+            `&transaction_param=${payment.id}` +
+            `&return_url=${encodeURIComponent(returnUrl)}`;
+
+        const result = { paymentId: payment.id, amount, clickUrl };
+        console.log('Returning result:', result);
+
+        return result;
+    }
 }

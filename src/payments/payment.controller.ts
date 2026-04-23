@@ -142,6 +142,23 @@ export class PaymentController {
         return { success: true, data: result };
     }
 
+    @Post('boost-package')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Create boost package invoice for listing' })
+    async createBoostPackageInvoice(
+        @Body() body: { listingId: string; packageType: string },
+        @CurrentUser() user: User,
+    ) {
+        console.log('Controller received:', { body, userId: user.id });
+
+        const packageType = body.packageType as PaymentPackage;
+        const result = await this.paymentService.createBoostPackageInvoice(user.id, packageType, body.listingId);
+
+        console.log('Controller returning:', { success: true, data: result });
+        return { success: true, data: result };
+    }
+
     @Get('product-status/:id')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
