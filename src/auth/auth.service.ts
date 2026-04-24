@@ -226,10 +226,23 @@ export class AuthService {
             expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRES_IN') || '7d',
         });
 
-        await this.prisma.refreshToken.create({
-            data: {
+        // Delete old refresh tokens for this user (optional - cleanup)
+        await this.prisma.refreshToken.deleteMany({
+            where: {
+                userId,
+                expiresAt: { lt: new Date() } // Only delete expired tokens
+            },
+        });
+
+        // Create new refresh token with upsert to avoid duplicates
+        await this.prisma.refreshToken.upsert({
+            where: { token: refreshToken },
+            create: {
                 userId,
                 token: refreshToken,
+                expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+            },
+            update: {
                 expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
             },
         });
@@ -302,18 +315,23 @@ export class AuthService {
     // Set cookies on response
     setTokenCookies(res: Response, tokens: TokenPair): void {
         const isProduction = process.env.NODE_ENV === 'production';
+        // ngrok ishlatilganda ham secure cookie kerak
+        const isNgrok = process.env.FRONTEND_URL?.includes('ngrok');
+        const useSecure = isProduction || isNgrok;
+        const useSameSite = useSecure ? 'none' as const : 'lax' as const;
 
         console.log('🍪 Setting cookies:', {
             isProduction,
+            isNgrok,
             NODE_ENV: process.env.NODE_ENV,
-            secure: isProduction,
-            sameSite: isProduction ? 'none' : 'lax',
+            secure: useSecure,
+            sameSite: useSameSite,
         });
 
         const cookieOptions = {
             httpOnly: true,
-            secure: isProduction,
-            sameSite: isProduction ? 'none' as const : 'lax' as const,
+            secure: useSecure,
+            sameSite: useSameSite,
         };
 
         res.cookie('accessToken', tokens.accessToken, {
@@ -380,5 +398,174 @@ export class AuthService {
         await this.prisma.telegramAuthSession.deleteMany({
             where: { expiresAt: { lt: new Date() } },
         });
+    }
+
+    // Create Magic Link for existing users
+    async createMagicLink(dto: TelegramCallbackDto): Promise<{ success: boolean; magicLink?: string; code?: string; error?: string }> {
+        try {
+            console.log('🔗 Creating magic link for existing user:', dto.telegramUserId);
+
+            const session = await this.prisma.telegramAuthSession.findUnique({
+                where: { id: dto.sessionId },
+            });
+
+            if (!session || session.type !== 'SESSION' || session.expiresAt < new Date()) {
+                console.error('❌ Session not found or expired:', dto.sessionId);
+                if (session) await this.prisma.telegramAuthSession.delete({ where: { id: dto.sessionId } });
+                return { success: false, error: 'Session expired or not found' };
+            }
+
+            const user = await this.prisma.user.findUnique({
+                where: { telegramUserId: BigInt(dto.telegramUserId) },
+            });
+
+            if (!user) {
+                return { success: false, error: 'User not found' };
+            }
+
+            // Generate magic token
+            const magicToken = uuidv4();
+            const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+            // Save magic token to database
+            await this.prisma.telegramAuthSession.create({
+                data: {
+                    id: `magic:${magicToken}`,
+                    type: 'MAGIC_LINK',
+                    data: JSON.stringify({
+                        userId: user.id,
+                        telegramUserId: dto.telegramUserId,
+                        originalSessionId: dto.sessionId
+                    }),
+                    expiresAt,
+                },
+            });
+
+            const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://otbozor.uz';
+            const magicLink = `${frontendUrl}/auth/magic?token=${magicToken}`;
+
+            return { success: true, magicLink };
+        } catch (error) {
+            console.error('❌ Magic link creation error:', error);
+            return { success: false, error: 'Failed to create magic link' };
+        }
+    }
+
+    // Create Magic Link for new users (with phone)
+    async createMagicLinkWithPhone(dto: TelegramCallbackDto): Promise<{ success: boolean; magicLink?: string; code?: string; error?: string }> {
+        try {
+            console.log('🔗 Creating magic link for new user:', dto.telegramUserId);
+
+            if (!dto.phone) {
+                return { success: false, error: 'Phone number is required' };
+            }
+
+            if (!/^\+?[1-9]\d{1,14}$/.test(dto.phone)) {
+                return { success: false, error: 'Invalid phone number format' };
+            }
+
+            const existingUserWithPhone = await this.prisma.user.findFirst({
+                where: {
+                    phone: dto.phone,
+                    NOT: { telegramUserId: BigInt(dto.telegramUserId) },
+                },
+            });
+
+            if (existingUserWithPhone) {
+                return { success: false, error: 'This phone number is already registered' };
+            }
+
+            // Create new user
+            const user = await this.prisma.user.create({
+                data: {
+                    telegramUserId: BigInt(dto.telegramUserId),
+                    telegramUsername: dto.telegramUsername || `user_${dto.telegramUserId}`,
+                    displayName: dto.displayName || dto.telegramUsername || `User ${dto.telegramUserId}`,
+                    phone: dto.phone,
+                    isVerified: true,
+                    status: 'ACTIVE',
+                },
+            });
+
+            // Generate magic token
+            const magicToken = uuidv4();
+            const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+            // Save magic token to database
+            await this.prisma.telegramAuthSession.create({
+                data: {
+                    id: `magic:${magicToken}`,
+                    type: 'MAGIC_LINK',
+                    data: JSON.stringify({
+                        userId: user.id,
+                        telegramUserId: dto.telegramUserId,
+                        originalSessionId: dto.sessionId
+                    }),
+                    expiresAt,
+                },
+            });
+
+            const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://otbozor.uz';
+            const magicLink = `${frontendUrl}/auth/magic?token=${magicToken}`;
+
+            return { success: true, magicLink };
+        } catch (error) {
+            console.error('❌ Magic link with phone creation error:', error);
+            return { success: false, error: 'Failed to create magic link' };
+        }
+    }
+
+    // Verify Magic Link and login user
+    async verifyMagicLink(token: string): Promise<{ success: boolean; tokens?: TokenPair; error?: string }> {
+        try {
+            console.log('🔍 Verifying magic link token:', token);
+
+            const magicSession = await this.prisma.telegramAuthSession.findUnique({
+                where: { id: `magic:${token}` },
+            });
+
+            if (!magicSession || magicSession.type !== 'MAGIC_LINK' || magicSession.expiresAt < new Date()) {
+                console.error('❌ Magic link not found or expired:', token);
+                if (magicSession) {
+                    await this.prisma.telegramAuthSession.delete({ where: { id: `magic:${token}` } });
+                }
+                return { success: false, error: 'Magic link expired or invalid' };
+            }
+
+            const { userId, telegramUserId, originalSessionId } = JSON.parse(magicSession.data);
+
+            const user = await this.prisma.user.findUnique({
+                where: { id: userId },
+            });
+
+            if (!user || user.status !== 'ACTIVE') {
+                return { success: false, error: 'User not found or inactive' };
+            }
+
+            // Update last login
+            await this.prisma.user.update({
+                where: { id: user.id },
+                data: { lastLoginAt: new Date() },
+            });
+
+            // Generate tokens
+            const tokens = await this.generateTokens(user.id, BigInt(telegramUserId));
+
+            // Clean up sessions
+            await this.prisma.telegramAuthSession.deleteMany({
+                where: {
+                    OR: [
+                        { id: `magic:${token}` },
+                        { id: originalSessionId }
+                    ]
+                }
+            });
+
+            console.log('✅ Magic link login successful for user:', user.id);
+            return { success: true, tokens };
+        } catch (error) {
+            console.error('❌ Magic link verification error:', error);
+            return { success: false, error: 'Failed to verify magic link' };
+        }
     }
 }

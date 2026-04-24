@@ -44,26 +44,49 @@ export class TelegramBotService {
             });
 
             if (existingUser) {
-                // Ro'yxatdan o'tgan — telefon so'ramasdan to'g'ridan-to'g'ri kod yuborish
-                console.log('✅ Existing user, sending code directly:', telegramUserId);
+                // Ro'yxatdan o'tgan — Magic Link yuborish
+                console.log('✅ Existing user, sending magic link:', telegramUserId);
 
-                const result = await this.authService.handleTelegramCallback({
+                const result = await this.authService.createMagicLink({
                     sessionId,
                     telegramUserId,
                     telegramUsername,
                     displayName,
                 });
 
-                if (result.success && result.code) {
+                if (result.success && result.magicLink) {
                     await ctx.reply(
-                        '✅ *Tasdiqlash kodi:*\n\n' +
-                        `\`${result.code}\`\n\n` +
-                        '⚠️ Bu kodni veb saytdagi login sahifasiga kiriting.\n' +
-                        '⏰ Kod 5 daqiqa davomida amal qiladi.',
-                        { parse_mode: 'Markdown', reply_markup: { remove_keyboard: true } }
+                        '✅ *Login havolasi tayyor!*\n\n' +
+                        '👆 Quyidagi tugmani bosing va avtomatik login bo\'ling:',
+                        {
+                            parse_mode: 'Markdown',
+                            reply_markup: {
+                                inline_keyboard: [[
+                                    { text: '🚀 Saytga kirish', url: result.magicLink }
+                                ]]
+                            }
+                        }
                     );
                 } else {
-                    await ctx.reply('❌ Xatolik yuz berdi. Veb saytdan qaytadan urinib ko\'ring.');
+                    // Fallback - eski usul (kod yuborish)
+                    const codeResult = await this.authService.handleTelegramCallback({
+                        sessionId,
+                        telegramUserId,
+                        telegramUsername,
+                        displayName,
+                    });
+
+                    if (codeResult.success && codeResult.code) {
+                        await ctx.reply(
+                            '✅ *Tasdiqlash kodi:*\n\n' +
+                            `\`${codeResult.code}\`\n\n` +
+                            '⚠️ Bu kodni veb saytdagi login sahifasiga kiriting.\n' +
+                            '⏰ Kod 5 daqiqa davomida amal qiladi.',
+                            { parse_mode: 'Markdown', reply_markup: { remove_keyboard: true } }
+                        );
+                    } else {
+                        await ctx.reply('❌ Xatolik yuz berdi. Veb saytdan qaytadan urinib ko\'ring.');
+                    }
                 }
             } else {
                 // Yangi foydalanuvchi — holatni DB ga saqlash (restart safe)
@@ -150,7 +173,7 @@ export class TelegramBotService {
             // Holatni DB dan o'chirish
             await this.prisma.telegramAuthSession.delete({ where: { id: pendingId } });
 
-            const result = await this.authService.handleTelegramCallback({
+            const result = await this.authService.createMagicLinkWithPhone({
                 sessionId,
                 telegramUserId,
                 telegramUsername,
@@ -160,7 +183,22 @@ export class TelegramBotService {
 
             console.log('✅ Auth callback result:', result);
 
-            if (result.success && result.code) {
+            if (result.success && result.magicLink) {
+                await ctx.reply(
+                    '✅ *Login havolasi tayyor!*\n\n' +
+                    '👆 Quyidagi tugmani bosing va avtomatik login bo\'ling:',
+                    {
+                        parse_mode: 'Markdown',
+                        reply_markup: {
+                            inline_keyboard: [[
+                                { text: '🚀 Saytga kirish', url: result.magicLink }
+                            ]],
+                            remove_keyboard: true
+                        }
+                    }
+                );
+            } else if (result.success && result.code) {
+                // Fallback - eski usul (kod yuborish)
                 await ctx.reply(
                     '✅ *Tasdiqlash kodi:*\n\n' +
                     `\`${result.code}\`\n\n` +
@@ -203,13 +241,15 @@ export class TelegramBotService {
         await ctx.reply(
             '🆘 *Yordam*\n\n' +
             '🐴 *Otbozor* - O\'zbekistondagi eng katta ot savdo platformasi\n\n' +
-            '*Login qilish:*\n' +
+            '*Yangi login usuli:*\n' +
             '1. Veb saytga o\'ting: otbozor.uz\n' +
             '2. "Telegram orqali kirish" tugmasini bosing\n' +
-            '3. Bot sizga telefon raqamni so\'raydi\n' +
-            '4. "📞 Telefon raqamni yuborish" tugmasini bosing\n' +
-            '5. Bot tasdiqlash kodini yuboradi\n' +
-            '6. Kodni veb saytda kiriting\n\n' +
+            '3. Bot sizga login havolasini yuboradi\n' +
+            '4. "� Salytga kirish" tugmasini bosing\n' +
+            '5. Avtomatik login bo\'lasiz!\n\n' +
+            '*Yangi foydalanuvchilar uchun:*\n' +
+            '- Telefon raqamingizni tasdiqlashingiz kerak\n' +
+            '- Keyin avtomatik login bo\'lasiz\n\n' +
             '*Aloqa:* @otbozor_support',
             { parse_mode: 'Markdown' }
         );

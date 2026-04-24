@@ -422,4 +422,61 @@ export class AuthController {
             timestamp: new Date().toISOString(),
         };
     }
+
+    @Post('magic')
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({
+        summary: 'Magic Link Login',
+        description: 'Magic link token orqali avtomatik login qiladi.',
+    })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                token: {
+                    type: 'string',
+                    description: 'Magic link token',
+                    example: '550e8400-e29b-41d4-a716-446655440000'
+                }
+            },
+            required: ['token']
+        }
+    })
+    @ApiResponse({
+        status: 200,
+        description: 'Magic link muvaffaqiyatli tekshirildi va login qilindi',
+    })
+    @ApiResponse({
+        status: 401,
+        description: 'Magic link yaroqsiz yoki muddati tugagan',
+    })
+    async verifyMagicLink(
+        @Body() body: { token: string },
+        @Res({ passthrough: true }) res: Response,
+    ): Promise<AuthResponse<{ tokens: { accessToken: string; refreshToken: string; expiresIn: string } }>> {
+        if (!body.token || body.token.trim().length === 0) {
+            throw new UnauthorizedException('Magic link token is required');
+        }
+
+        const result = await this.authService.verifyMagicLink(body.token.trim());
+
+        if (!result.success || !result.tokens) {
+            throw new UnauthorizedException(result.error || 'Invalid or expired magic link');
+        }
+
+        this.authService.setTokenCookies(res, result.tokens);
+
+        return {
+            success: true,
+            data: {
+                tokens: {
+                    accessToken: result.tokens.accessToken,
+                    refreshToken: result.tokens.refreshToken,
+                    expiresIn: '15m',
+                },
+            },
+            message: 'Magic link login successful. You are now logged in.',
+            timestamp: new Date().toISOString(),
+        };
+    }
 }

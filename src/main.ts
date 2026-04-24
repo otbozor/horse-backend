@@ -38,6 +38,8 @@ async function bootstrap() {
         'https://www.otbozor.uz',
         'https://otbozor.uz',
         'https://test.otbozor.uz',
+        // ngrok URLs (development)
+        'https://soloistic-heartlessly-audie.ngrok-free.dev',
         process.env.APP_URL,
         ...(process.env.CORS_ORIGIN?.split(',').map(s => s.trim()) || []),
     ].filter(Boolean);
@@ -48,6 +50,11 @@ async function bootstrap() {
         origin: (origin, callback) => {
             // Allow requests with no origin (mobile apps, Postman, curl, etc.)
             if (!origin) return callback(null, true);
+
+            // Allow ngrok URLs in development
+            if (process.env.NODE_ENV === 'development' && origin.includes('.ngrok')) {
+                return callback(null, true);
+            }
 
             if (allowedOrigins.some(allowed => origin === allowed || origin.startsWith(allowed))) {
                 callback(null, true);
