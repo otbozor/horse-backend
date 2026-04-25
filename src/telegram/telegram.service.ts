@@ -57,7 +57,7 @@ export class TelegramBotService {
                 if (result.success && result.magicLink) {
                     await ctx.reply(
                         '✅ *Login havolasi tayyor!*\n\n' +
-                        '👆 Quyidagi tugmani bosing va avtomatik login bo\'ling:',
+                        '👇 Quyidagi tugmani bosing va avtomatik login bo\'ling:',
                         {
                             parse_mode: 'Markdown',
                             reply_markup: {
@@ -186,7 +186,7 @@ export class TelegramBotService {
             if (result.success && result.magicLink) {
                 await ctx.reply(
                     '✅ *Login havolasi tayyor!*\n\n' +
-                    '👆 Quyidagi tugmani bosing va avtomatik login bo\'ling:',
+                    '👇 Quyidagi tugmani bosing va avtomatik login bo\'ling:',
                     {
                         parse_mode: 'Markdown',
                         reply_markup: {
@@ -245,7 +245,7 @@ export class TelegramBotService {
             '1. Veb saytga o\'ting: otbozor.uz\n' +
             '2. "Telegram orqali kirish" tugmasini bosing\n' +
             '3. Bot sizga login havolasini yuboradi\n' +
-            '4. "� Salytga kirish" tugmasini bosing\n' +
+            '4. "🚀 Saytga kirish" tugmasini bosing\n' +
             '5. Avtomatik login bo\'lasiz!\n\n' +
             '*Yangi foydalanuvchilar uchun:*\n' +
             '- Telefon raqamingizni tasdiqlashingiz kerak\n' +
