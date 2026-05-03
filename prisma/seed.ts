@@ -23,6 +23,8 @@ async function main() {
     });
     console.log('✅ Admin user created:', admin.username);
 
+   
+
     // 2. Regions
     const regions = [
         { nameUz: 'Toshkent shahri', nameRu: 'Город Ташкент', slug: 'toshkent-shahri' },

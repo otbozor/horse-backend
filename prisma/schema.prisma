@@ -103,7 +103,7 @@ model HorseListing {
   title          String
   slug           String        @unique
   description    String?
-  regionId       String        @map("region_id")
+  regionId       String?       @map("region_id")
   districtId     String?       @map("district_id")
   purpose        HorsePurpose?
   gender         HorseGender?
@@ -135,7 +135,7 @@ model HorseListing {
   favorites      Favorite[]
   breed          Breed?        @relation(fields: [breedId], references: [id])
   district       District?     @relation(fields: [districtId], references: [id])
-  region         Region        @relation(fields: [regionId], references: [id])
+  region         Region?       @relation(fields: [regionId], references: [id])
   user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   media          HorseMedia[]
   payments       Payment[]

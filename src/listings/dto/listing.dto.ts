@@ -21,9 +21,10 @@ export class CreateListingDto {
     @IsString()
     description: string;
 
-    @ApiProperty({ description: 'Region ID' })
+    @ApiPropertyOptional({ description: 'Region ID (required for Uzbekistan)' })
+    @IsOptional()
     @IsUUID()
-    regionId: string;
+    regionId?: string;
 
     @ApiPropertyOptional({ description: 'District ID' })
     @IsOptional()
