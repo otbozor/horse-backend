@@ -19,6 +19,7 @@ export class ListingsService {
         };
 
         // Apply filters
+        if (filter.userId) where.userId = filter.userId;
         if (filter.regionId) where.regionId = filter.regionId;
         if (filter.districtId) where.districtId = filter.districtId;
         if (filter.breedId) where.breedId = filter.breedId;

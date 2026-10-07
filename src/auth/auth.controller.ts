@@ -14,7 +14,7 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { Response, Request } from 'express';
 import { AuthService } from './auth.service';
-import { TelegramAuthDto, TelegramCallbackDto, VerifyCodeDto, AdminLoginDto } from './dto/auth.dto';
+import { TelegramAuthDto, TelegramCallbackDto, VerifyCodeDto, AdminLoginDto, TelegramWebAppAuthDto } from './dto/auth.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from '@prisma/client';
@@ -243,6 +243,44 @@ export class AuthController {
                 expiresIn: 300,
             },
             message: 'Telegram verification successful. Use the code to complete login.',
+            timestamp: new Date().toISOString(),
+        };
+    }
+
+    @Post('telegram/webapp')
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({
+        summary: 'Telegram Mini App orqali login',
+        description: "Telegram.WebApp.initData imzosini tekshiradi va tokenlarni javob tanasida qaytaradi. Yangi foydalanuvchi avtomatik yaratiladi.",
+    })
+    @ApiResponse({ status: 200, description: 'Muvaffaqiyatli login' })
+    @ApiResponse({ status: 401, description: "initData noto'g'ri yoki muddati o'tgan" })
+    async telegramWebAppLogin(
+        @Body() dto: TelegramWebAppAuthDto,
+    ): Promise<AuthResponse<{ user: UserMeResponse; tokens: { accessToken: string; refreshToken: string; expiresIn: string } }>> {
+        const { user, tokens } = await this.authService.loginWithTelegramWebApp(dto.initData);
+        return {
+            success: true,
+            data: {
+                user: {
+                    id: user.id,
+                    username: user.username || undefined,
+                    displayName: user.displayName,
+                    avatarUrl: user.avatarUrl || undefined,
+                    isVerified: user.isVerified,
+                    phone: user.phone || undefined,
+                    telegramUsername: user.telegramUsername || undefined,
+                    isAdmin: user.isAdmin,
+                    listingCredits: user.listingCredits,
+                    hasUnlimitedListings: user.hasUnlimitedListings,
+                },
+                tokens: {
+                    accessToken: tokens.accessToken,
+                    refreshToken: tokens.refreshToken,
+                    expiresIn: '15m',
+                },
+            },
+            message: 'Mini App login successful',
             timestamp: new Date().toISOString(),
         };
     }

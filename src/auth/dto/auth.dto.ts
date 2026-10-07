@@ -113,3 +113,20 @@ export class AdminLoginDto {
     @IsString()
     password: string;
 }
+
+/**
+ * Telegram Mini App orqali login uchun DTO
+ *
+ * Qo'llanish:
+ * 1. Mini App Telegram.WebApp.initData qatorini POST /api/auth/telegram/webapp ga yuboradi
+ * 2. Backend bot tokeni bilan imzoni tekshiradi, foydalanuvchini topadi yoki yaratadi
+ * 3. Tokenlar javob tanasida qaytariladi (Mini App ularni Authorization header'da yuboradi)
+ */
+export class TelegramWebAppAuthDto {
+    @ApiProperty({
+        description: 'Telegram.WebApp.initData qatori (o\'zgartirilmagan holda)',
+        example: 'query_id=AAH...&user=%7B%22id%22%3A123...%7D&auth_date=1700000000&hash=abc...',
+    })
+    @IsString()
+    initData: string;
+}
