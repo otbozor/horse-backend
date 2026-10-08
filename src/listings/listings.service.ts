@@ -321,7 +321,16 @@ export class ListingsService {
         if (dto.breedId !== undefined) updateData.breedId = dto.breedId;
         if (dto.ageYears !== undefined) updateData.ageYears = dto.ageYears;
         if (dto.color !== undefined) updateData.color = dto.color;
-        if (dto.priceAmount !== undefined) updateData.priceAmount = dto.priceAmount;
+        if (dto.priceAmount !== undefined) {
+            updateData.priceAmount = dto.priceAmount;
+            const oldPrice = Number(listing.priceAmount);
+            if (Number(dto.priceAmount) !== oldPrice) {
+                await this.prisma.priceHistory.create({
+                    data: { listingId: id, oldPrice, newPrice: dto.priceAmount, currency: dto.priceCurrency ?? listing.priceCurrency },
+                });
+                updateData.previousPrice = Number(dto.priceAmount) < oldPrice ? oldPrice : null;
+            }
+        }
         if (dto.priceCurrency !== undefined) updateData.priceCurrency = dto.priceCurrency;
         if (dto.hasPassport !== undefined) updateData.hasPassport = dto.hasPassport;
         if (dto.hasVaccine !== undefined) updateData.hasVaccine = dto.hasVaccine;
