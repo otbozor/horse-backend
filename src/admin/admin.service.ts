@@ -1,4 +1,4 @@
-import { Injectable, ForbiddenException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, ForbiddenException, NotFoundException, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramChannelService } from '../telegram/telegram-channel.service';
 import { ListingStatus, SaleSource, Prisma } from '@prisma/client';
@@ -186,7 +186,9 @@ export class AdminService {
                 include: {
                     user: { select: { displayName: true, telegramUsername: true } },
                     region: { select: { nameUz: true } },
-                    media: { take: 1 },
+                    district: { select: { nameUz: true } },
+                    breed: { select: { name: true } },
+                    media: { orderBy: { sortOrder: 'asc' } },
                 },
             }),
             this.prisma.horseListing.count({ where: { status: ListingStatus.PENDING } }),
@@ -359,9 +361,19 @@ export class AdminService {
     }
 
     // Users management
-    async getUsers(page = 1, limit = 20, status?: string) {
+    async getUsers(page = 1, limit = 20, status?: string, q?: string) {
         const where: Prisma.UserWhereInput = {};
         if (status) where.status = status as any;
+        const term = q?.trim().replace(/^@/, '');
+        if (term) {
+            where.OR = [
+                { displayName: { contains: term, mode: 'insensitive' } },
+                { telegramUsername: { contains: term, mode: 'insensitive' } },
+                { username: { contains: term, mode: 'insensitive' } },
+                { phone: { contains: term } },
+                ...(/^\d{5,20}$/.test(term) ? [{ telegramUserId: BigInt(term) }] : []),
+            ];
+        }
 
         const skip = (page - 1) * limit;
 
@@ -403,6 +415,49 @@ export class AdminService {
             data: serializedUsers,
             pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
         };
+    }
+
+    // ---- Adminlar (Telegram akkaunt orqali Mini App admin paneli) ----
+
+    async getAdmins() {
+        const admins = await this.prisma.user.findMany({
+            where: { isAdmin: true },
+            orderBy: { createdAt: 'asc' },
+            select: { id: true, displayName: true, telegramUserId: true, telegramUsername: true, username: true, avatarUrl: true, createdAt: true },
+        });
+        return admins.map(a => ({ ...a, telegramUserId: a.telegramUserId ? a.telegramUserId.toString() : null }));
+    }
+
+    /** identifier: Telegram ID, @username yoki telefon raqami */
+    async addAdmin(identifier: string, adminUserId: string) {
+        await this.requireAdmin(adminUserId);
+        const term = (identifier || '').trim().replace(/^@/, '');
+        if (!term) throw new BadRequestException('Telegram ID yoki @username kiriting');
+        const user = await this.prisma.user.findFirst({
+            where: {
+                OR: [
+                    ...(/^\d{5,20}$/.test(term) ? [{ telegramUserId: BigInt(term) }] : []),
+                    { telegramUsername: { equals: term, mode: 'insensitive' } },
+                    { phone: term.startsWith('+') ? term : `+${term}` },
+                ],
+            },
+        });
+        if (!user) {
+            throw new NotFoundException("Foydalanuvchi topilmadi. U avval botni ochib, Mini App'ga kamida bir marta kirgan bo'lishi kerak");
+        }
+        await this.prisma.user.update({ where: { id: user.id }, data: { isAdmin: true } });
+        await this.createAuditLog(adminUserId, 'admin.add', 'User', user.id);
+        return { id: user.id, displayName: user.displayName };
+    }
+
+    async removeAdmin(userId: string, adminUserId: string) {
+        await this.requireAdmin(adminUserId);
+        if (userId === adminUserId) throw new BadRequestException("O'zingizni admindan chiqara olmaysiz");
+        const count = await this.prisma.user.count({ where: { isAdmin: true } });
+        if (count <= 1) throw new BadRequestException("Oxirgi adminni o'chirib bo'lmaydi");
+        await this.prisma.user.update({ where: { id: userId }, data: { isAdmin: false } });
+        await this.createAuditLog(adminUserId, 'admin.remove', 'User', userId);
+        return { success: true };
     }
 
     async banUser(userId: string, adminUserId: string) {

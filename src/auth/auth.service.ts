@@ -383,6 +383,13 @@ export class AuthService {
         const telegramUserId = BigInt(tg.id);
         const displayName = [tg.first_name, tg.last_name].filter(Boolean).join(' ') || `User ${tg.id}`;
 
+        // ADMIN_TELEGRAM_IDS ro'yxatidagi akkauntlar avtomatik admin bo'ladi (faqat beriladi, olib qo'yilmaydi)
+        const bootstrapAdminIds = (this.configService.get<string>('ADMIN_TELEGRAM_IDS') || '')
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
+        const isBootstrapAdmin = bootstrapAdminIds.includes(String(tg.id));
+
         let user = await this.prisma.user.findUnique({ where: { telegramUserId } });
 
         if (!user) {
@@ -393,6 +400,7 @@ export class AuthService {
                     displayName,
                     avatarUrl: tg.photo_url,
                     isVerified: true,
+                    isAdmin: isBootstrapAdmin,
                     status: 'ACTIVE',
                     lastLoginAt: new Date(),
                 },
@@ -407,6 +415,7 @@ export class AuthService {
                     telegramUsername: tg.username || user.telegramUsername,
                     avatarUrl: user.avatarUrl || tg.photo_url,
                     lastLoginAt: new Date(),
+                    ...(isBootstrapAdmin && !user.isAdmin ? { isAdmin: true } : {}),
                 },
             });
         }
