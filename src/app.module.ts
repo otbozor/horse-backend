@@ -17,6 +17,7 @@ import { ProductsModule } from './products/products.module';
 import { PaymentModule } from './payments/payment.module';
 import { CommentsModule } from './comments/comments.module';
 import { TrustModule } from './trust/trust.module';
+import { ServicesCatalogModule } from './services-catalog/services-catalog.module';
 
 @Module({
     imports: [
@@ -63,6 +64,9 @@ import { TrustModule } from './trust/trust.module';
 
         // Shikoyat, sharh, narx taklifi, narx tarixi
         TrustModule,
+
+        // Xizmatlar katalogi (veterinar, taqachi, ot tashish...)
+        ServicesCatalogModule,
     ],
 })
 export class AppModule { }
