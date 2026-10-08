@@ -28,6 +28,7 @@ export class AdminFinanceController {
             'listing_tezkor_savdo_price', 'listing_tezkor_savdo_discount',
             'listing_turbo_savdo_price', 'listing_turbo_savdo_discount',
             'listing_bundle_5_price', 'listing_bundle_10_price', 'listing_bundle_20_price',
+            'stars_rate_uzs', 'stars_enabled',
         ];
         const settings = await this.prisma.appSetting.findMany({ where: { key: { in: keys } } });
         const map: Record<string, string> = {};
@@ -57,6 +58,10 @@ export class AdminFinanceController {
                     bundle10: Number(map['listing_bundle_10_price'] || 90000),
                     bundle20: Number(map['listing_bundle_20_price'] || 160000),
                 },
+                stars: {
+                    rate: Number(map['stars_rate_uzs'] || 220),
+                    enabled: map['stars_enabled'] !== 'false',
+                },
             },
         };
     }
@@ -78,6 +83,7 @@ export class AdminFinanceController {
                 bundle10?: number;
                 bundle20?: number;
             };
+            stars?: { rate?: number; enabled?: boolean };
         },
     ) {
         await this.adminService.requireAdmin(user.id);
@@ -126,6 +132,11 @@ export class AdminFinanceController {
             if (b.bundle5 && b.bundle5 > 0) upserts.push(upsert('listing_bundle_5_price', String(b.bundle5)));
             if (b.bundle10 && b.bundle10 > 0) upserts.push(upsert('listing_bundle_10_price', String(b.bundle10)));
             if (b.bundle20 && b.bundle20 > 0) upserts.push(upsert('listing_bundle_20_price', String(b.bundle20)));
+        }
+
+        if (body.stars) {
+            if (body.stars.rate && body.stars.rate > 0) upserts.push(upsert('stars_rate_uzs', String(body.stars.rate)));
+            if (body.stars.enabled !== undefined) upserts.push(upsert('stars_enabled', String(body.stars.enabled)));
         }
 
         await Promise.all(upserts);

@@ -362,6 +362,9 @@ model Payment {
   updatedAt         DateTime        @updatedAt @map("updated_at")
   productId         String?         @map("product_id")
   listingBundleSize Int?            @map("listing_bundle_size")
+  method            PaymentMethod   @default(CLICK)
+  starsAmount       Int?            @map("stars_amount")
+  telegramChargeId  String?         @map("telegram_charge_id")
   listing           HorseListing?   @relation(fields: [listingId], references: [id], onDelete: Cascade)
   product           Product?        @relation(fields: [productId], references: [id], onDelete: Cascade)
   user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -713,4 +716,9 @@ enum HorseRequestStatus {
   ACTIVE
   CLOSED
   REMOVED
+}
+
+enum PaymentMethod {
+  CLICK
+  STARS
 }

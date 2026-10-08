@@ -2,7 +2,7 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramChannelService } from '../telegram/telegram-channel.service';
-import { PaymentStatus, PaymentPackage, ListingStatus, ProductStatus } from '@prisma/client';
+import { PaymentStatus, PaymentPackage, ListingStatus, ProductStatus, Payment, Prisma } from '@prisma/client';
 import * as crypto from 'crypto';
 
 const PACKAGE_DEFAULTS = {
@@ -390,16 +390,29 @@ export class PaymentService {
         }
 
         // ✅ Complete payment
+        await this.applyCompletedPayment(payment, { clickTransId: click_trans_id, clickPaydocId: click_paydoc_id });
+
+        return {
+            click_trans_id: click_trans_id,
+            merchant_trans_id,
+            merchant_confirm_id: payment.merchantPrepareId,
+            error: 0,
+            error_note: 'Success',
+        };
+    }
+
+    /**
+     * To'lov muvaffaqiyatli bo'lganda uning effektini qo'llaydi (TOP, kreditlar,
+     * e'lon/mahsulotni tekshiruvga yuborish). Click va Telegram Stars ikkalasi
+     * ham shu yerdan foydalanadi - natija to'lov usulidan qat'i nazar bir xil.
+     */
+    async applyCompletedPayment(payment: Payment, extra: Prisma.PaymentUpdateInput = {}) {
         if (payment.listingBundleSize && !payment.listingId) {
             // Credits-only bundle purchase (no listing to auto-submit)
             await this.prisma.$transaction([
                 this.prisma.payment.update({
-                    where: { id: merchant_trans_id },
-                    data: {
-                        status: PaymentStatus.COMPLETED,
-                        clickTransId: click_trans_id,
-                        clickPaydocId: click_paydoc_id,
-                    },
+                    where: { id: payment.id },
+                    data: { status: PaymentStatus.COMPLETED, ...extra },
                 }),
                 this.prisma.user.update({
                     where: { id: payment.userId },
@@ -412,12 +425,8 @@ export class PaymentService {
             const bundleSize = payment.listingBundleSize;
             await this.prisma.$transaction([
                 this.prisma.payment.update({
-                    where: { id: merchant_trans_id },
-                    data: {
-                        status: PaymentStatus.COMPLETED,
-                        clickTransId: click_trans_id,
-                        clickPaydocId: click_paydoc_id,
-                    },
+                    where: { id: payment.id },
+                    data: { status: PaymentStatus.COMPLETED, ...extra },
                 }),
                 // Add bundle credits to user (bundleSize - 1 because 1 will be used immediately)
                 this.prisma.user.update({
@@ -441,12 +450,8 @@ export class PaymentService {
             const isPremium = payment.packageType === PaymentPackage.TURBO_SAVDO;
             await this.prisma.$transaction([
                 this.prisma.payment.update({
-                    where: { id: merchant_trans_id },
-                    data: {
-                        status: PaymentStatus.COMPLETED,
-                        clickTransId: click_trans_id,
-                        clickPaydocId: click_paydoc_id,
-                    },
+                    where: { id: payment.id },
+                    data: { status: PaymentStatus.COMPLETED, ...extra },
                 }),
                 this.prisma.horseListing.update({
                     where: { id: payment.listingId },
@@ -485,12 +490,8 @@ export class PaymentService {
             }
             await this.prisma.$transaction([
                 this.prisma.payment.update({
-                    where: { id: merchant_trans_id },
-                    data: {
-                        status: PaymentStatus.COMPLETED,
-                        clickTransId: click_trans_id,
-                        clickPaydocId: click_paydoc_id,
-                    },
+                    where: { id: payment.id },
+                    data: { status: PaymentStatus.COMPLETED, ...extra },
                 }),
                 this.prisma.horseListing.update({
                     where: { id: payment.listingId },
@@ -501,12 +502,8 @@ export class PaymentService {
         } else if (payment.productId) {
             await this.prisma.$transaction([
                 this.prisma.payment.update({
-                    where: { id: merchant_trans_id },
-                    data: {
-                        status: PaymentStatus.COMPLETED,
-                        clickTransId: click_trans_id,
-                        clickPaydocId: click_paydoc_id,
-                    },
+                    where: { id: payment.id },
+                    data: { status: PaymentStatus.COMPLETED, ...extra },
                 }),
                 this.prisma.product.update({
                     where: { id: payment.productId },
@@ -531,14 +528,6 @@ export class PaymentService {
                 }).catch(() => { });
             }
         }
-
-        return {
-            click_trans_id: click_trans_id,
-            merchant_trans_id,
-            merchant_confirm_id: payment.merchantPrepareId,
-            error: 0,
-            error_note: 'Success',
-        };
     }
 
     // Check product payment status

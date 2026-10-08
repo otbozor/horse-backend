@@ -7,6 +7,7 @@ import { Public } from '../common/decorators/public.decorator';
 import { User } from '@prisma/client';
 import { PaymentPackage } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { StarsService, StarsInvoiceInput } from './stars.service';
 
 @ApiTags('Payments')
 @Controller('payments')
@@ -14,7 +15,20 @@ export class PaymentController {
     constructor(
         private readonly paymentService: PaymentService,
         private readonly prisma: PrismaService,
+        private readonly stars: StarsService,
     ) { }
+
+    @Get('stars-config')
+    @Public()
+    async starsConfig() {
+        return { success: true, data: await this.stars.getConfig() };
+    }
+
+    @Post('stars-invoice')
+    @UseGuards(JwtAuthGuard)
+    async starsInvoice(@Body() body: StarsInvoiceInput, @CurrentUser() user: User) {
+        return { success: true, data: await this.stars.createInvoice(user.id, body) };
+    }
 
     @Get('reactivation-price')
     @Public()
