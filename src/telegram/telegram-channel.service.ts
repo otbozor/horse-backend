@@ -210,6 +210,60 @@ export class TelegramChannelService {
         }
     }
 
+    // ---------- Saqlangan qidiruv ----------
+
+    /** Saqlangan qidiruvga mos yangi e'lon: rasm + Mini App tugmasi */
+    async notifySavedSearchMatch(
+        telegramUserId: string,
+        searchLabel: string,
+        listing: { id: string; title: string; price: string; place?: string | null; photoUrl?: string | null },
+    ): Promise<boolean> {
+        const caption =
+            `🔔 <b>"${this.escapeHtml(searchLabel)}" qidiruvingizga yangi e'lon</b>\n\n` +
+            `🐴 ${this.escapeHtml(listing.title)}\n` +
+            `💰 <b>${this.escapeHtml(listing.price)}</b>` +
+            (listing.place ? `\n📍 ${this.escapeHtml(listing.place)}` : '');
+        const extra = { parse_mode: 'HTML' as const, ...this.miniAppButton("📱 E'lonni ko'rish", `/listings/${listing.id}`) };
+        try {
+            if (listing.photoUrl) {
+                await this.bot.telegram.sendPhoto(telegramUserId, listing.photoUrl, { caption, ...extra });
+            } else {
+                await this.bot.telegram.sendMessage(telegramUserId, caption, extra);
+            }
+            return true;
+        } catch (error) {
+            this.logger.error(`❌ Failed to notify saved search match: ${error.message}`);
+            return false;
+        }
+    }
+
+    // ---------- "Ot kerak" so'rovlari ----------
+
+    async notifyRequestResponse(
+        requesterTelegramId: string,
+        request: { id: string; title: string },
+        responder: { name: string; phone?: string | null; telegram?: string | null },
+        listing?: { id: string; title: string; price: string } | null,
+        message?: string | null,
+    ): Promise<void> {
+        let text =
+            `📩 <b>So'rovingizga javob keldi</b>\n\n` +
+            `🔎 ${this.escapeHtml(request.title)}\n\n` +
+            `👤 ${this.escapeHtml(responder.name)}`;
+        if (responder.phone) text += `\n📞 ${this.escapeHtml(responder.phone)}`;
+        if (responder.telegram) text += `\n✈️ @${this.escapeHtml(responder.telegram.replace(/^@/, ''))}`;
+        if (listing) text += `\n\n🐴 Taklif: <b>${this.escapeHtml(listing.title)}</b> — ${this.escapeHtml(listing.price)}`;
+        if (message) text += `\n\n📝 ${this.escapeHtml(message)}`;
+        try {
+            await this.bot.telegram.sendMessage(requesterTelegramId, text, {
+                parse_mode: 'HTML',
+                ...this.miniAppButton(listing ? "📱 Taklif qilingan otni ko'rish" : "📱 So'rovni ochish", listing ? `/listings/${listing.id}` : `/requests/${request.id}`),
+            });
+        } catch (error) {
+            this.logger.error(`❌ Failed to notify request response: ${error.message}`);
+        }
+    }
+
     // ---------- Xizmatlar ----------
 
     async notifyAdminNewService(service: { id: string; title: string; category: string; userName?: string }): Promise<void> {

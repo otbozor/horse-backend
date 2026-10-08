@@ -1,6 +1,7 @@
 import { Injectable, ForbiddenException, NotFoundException, UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramChannelService } from '../telegram/telegram-channel.service';
+import { SavedSearchService } from '../engagement/saved-search.service';
 import { ListingStatus, SaleSource, Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
@@ -15,6 +16,7 @@ export class AdminService {
     constructor(
         private prisma: PrismaService,
         private telegramNotify: TelegramChannelService,
+        private savedSearches: SavedSearchService,
     ) { }
 
     // Check if user is admin
@@ -289,6 +291,8 @@ export class AdminService {
             if (listingForChannel) {
                 this.telegramNotify.postListingToChannel(listingForChannel).catch(() => { });
             }
+            // Saqlangan qidiruvlarga mos foydalanuvchilarga bot xabari
+            this.savedSearches.notifyMatches(listingId).catch(() => { });
         }
 
         const { user: _user, ...listingData } = listing;

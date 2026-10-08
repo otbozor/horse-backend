@@ -11,9 +11,10 @@ import { BlogModule } from '../blog/blog.module';
 import { MediaModule } from '../media/media.module';
 import { EventsModule } from '../events/events.module';
 import { TelegramModule } from '../telegram/telegram.module';
+import { EngagementModule } from '../engagement/engagement.module';
 
 @Module({
-    imports: [BlogModule, MediaModule, EventsModule, TelegramModule],
+    imports: [BlogModule, MediaModule, EventsModule, TelegramModule, EngagementModule],
     controllers: [
         AdminController,
         AdminListingsController,
