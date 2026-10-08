@@ -18,6 +18,7 @@ import { PaymentModule } from './payments/payment.module';
 import { CommentsModule } from './comments/comments.module';
 import { TrustModule } from './trust/trust.module';
 import { ServicesCatalogModule } from './services-catalog/services-catalog.module';
+import { EngagementModule } from './engagement/engagement.module';
 
 @Module({
     imports: [
@@ -67,6 +68,9 @@ import { ServicesCatalogModule } from './services-catalog/services-catalog.modul
 
         // Xizmatlar katalogi (veterinar, taqachi, ot tashish...)
         ServicesCatalogModule,
+
+        // Saqlangan qidiruv va "Ot kerak" so'rovlari
+        EngagementModule,
     ],
 })
 export class AppModule { }
