@@ -32,6 +32,10 @@ model User {
   productFavorites     ProductFavorite[]
   products             Product[]
   viewLogs             ViewLog[]
+  reportsFiled         ListingReport[]
+  reviewsGiven         SellerReview[]    @relation("ReviewsGiven")
+  reviewsReceived      SellerReview[]    @relation("ReviewsReceived")
+  priceOffers          PriceOffer[]
 
   @@map("users")
 }
@@ -131,6 +135,7 @@ model HorseListing {
   contactName    String?       @map("contact_name")
   contactPhone   String?       @map("contact_phone")
   contactTelegram String?      @map("contact_telegram")
+  previousPrice  Decimal?      @map("previous_price") @db.Decimal(15, 2)
   comments       Comment[]
   favorites      Favorite[]
   breed          Breed?        @relation(fields: [breedId], references: [id])
@@ -140,6 +145,10 @@ model HorseListing {
   media          HorseMedia[]
   payments       Payment[]
   viewLogs       ViewLog[]
+  reports        ListingReport[]
+  reviews        SellerReview[]
+  priceOffers    PriceOffer[]
+  priceHistory   PriceHistory[]
 
   @@index([userId])
   @@index([regionId])
@@ -470,4 +479,96 @@ model CacheEntry {
 
   @@index([expiresAt])
   @@map("cache_entries")
+}
+
+// ---------- Ishonch va savdo ----------
+
+model ListingReport {
+  id         String       @id @default(uuid())
+  listingId  String       @map("listing_id")
+  reporterId String       @map("reporter_id")
+  reason     ReportReason
+  comment    String?
+  status     ReportStatus @default(PENDING)
+  createdAt  DateTime     @default(now()) @map("created_at")
+  resolvedAt DateTime?    @map("resolved_at")
+  listing    HorseListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  reporter   User         @relation(fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, reporterId])
+  @@index([status])
+  @@map("listing_reports")
+}
+
+model SellerReview {
+  id              String        @id @default(uuid())
+  sellerId        String        @map("seller_id")
+  reviewerId      String        @map("reviewer_id")
+  listingId       String?       @map("listing_id")
+  stars           Int
+  comment         String?
+  sellerReply     String?       @map("seller_reply")
+  sellerRepliedAt DateTime?     @map("seller_replied_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+  seller          User          @relation("ReviewsReceived", fields: [sellerId], references: [id], onDelete: Cascade)
+  reviewer        User          @relation("ReviewsGiven", fields: [reviewerId], references: [id], onDelete: Cascade)
+  listing         HorseListing? @relation(fields: [listingId], references: [id], onDelete: SetNull)
+
+  @@unique([sellerId, reviewerId])
+  @@index([sellerId])
+  @@map("seller_reviews")
+}
+
+model PriceOffer {
+  id          String           @id @default(uuid())
+  listingId   String           @map("listing_id")
+  buyerId     String           @map("buyer_id")
+  amount      Decimal          @db.Decimal(15, 2)
+  currency    Currency         @default(UZS)
+  message     String?
+  status      PriceOfferStatus @default(PENDING)
+  createdAt   DateTime         @default(now()) @map("created_at")
+  respondedAt DateTime?        @map("responded_at")
+  listing     HorseListing     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  buyer       User             @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@index([buyerId])
+  @@map("price_offers")
+}
+
+model PriceHistory {
+  id        String       @id @default(uuid())
+  listingId String       @map("listing_id")
+  oldPrice  Decimal      @map("old_price") @db.Decimal(15, 2)
+  newPrice  Decimal      @map("new_price") @db.Decimal(15, 2)
+  currency  Currency     @default(UZS)
+  createdAt DateTime     @default(now()) @map("created_at")
+  listing   HorseListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@map("price_history")
+}
+
+enum ReportReason {
+  FRAUD
+  SOLD
+  WRONG_INFO
+  DUPLICATE
+  OFFENSIVE
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  RESOLVED
+  DISMISSED
+}
+
+enum PriceOfferStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
 }

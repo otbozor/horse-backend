@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { Update, Start, Ctx, Help, On, Command } from 'nestjs-telegraf';
+import { Update, Start, Ctx, Help, On, Command, Action } from 'nestjs-telegraf';
 import { Context } from 'telegraf';
 import { AuthService } from '../auth/auth.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { TelegramChannelService } from './telegram-channel.service';
+import { resolvePriceOffer } from '../trust/price-offer-core';
 
 @Injectable()
 @Update()
@@ -10,7 +12,26 @@ export class TelegramBotService {
     constructor(
         private readonly authService: AuthService,
         private readonly prisma: PrismaService,
+        private readonly channel: TelegramChannelService,
     ) { }
+
+    /** Sotuvchi narx taklifini bot xabaridagi tugma orqali qabul qiladi / rad etadi */
+    @Action(/^offer:(a|r):(.+)$/)
+    async onOfferAction(@Ctx() ctx: Context) {
+        const data = ctx.callbackQuery && 'data' in ctx.callbackQuery ? ctx.callbackQuery.data : '';
+        const [, kind, offerId] = data.split(':');
+        const accept = kind === 'a';
+        try {
+            await resolvePriceOffer(this.prisma, this.channel, offerId, { telegramUserId: BigInt(ctx.from!.id) }, accept);
+            await ctx.answerCbQuery(accept ? 'Taklif qabul qilindi ✅' : 'Taklif rad etildi');
+            const original = ctx.callbackQuery?.message && 'text' in ctx.callbackQuery.message ? ctx.callbackQuery.message.text : '';
+            await ctx.editMessageText(
+                `${original}\n\n${accept ? "✅ Qabul qilindi — xaridorga kontaktingiz yuborildi" : '❌ Rad etildi'}`,
+            ).catch(() => { });
+        } catch (error) {
+            await ctx.answerCbQuery(error?.message || 'Xatolik yuz berdi', { show_alert: true }).catch(() => { });
+        }
+    }
 
     @Start()
     async onStart(@Ctx() ctx: Context) {

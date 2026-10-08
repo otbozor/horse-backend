@@ -156,6 +156,98 @@ export class TelegramChannelService {
         return { reply_markup: { inline_keyboard: [[{ text, web_app: { url: `${this.miniAppUrl}${path}` } }]] } };
     }
 
+    // ---------- Narx taklifi ----------
+
+    /** Sotuvchiga yangi narx taklifi: botda to'g'ridan-to'g'ri Qabul / Rad tugmalari bilan */
+    async notifyPriceOffer(
+        sellerTelegramId: string,
+        offer: { id: string; amount: string; message?: string | null },
+        listing: { id: string; title: string; price: string },
+        buyerName: string,
+    ): Promise<void> {
+        const text =
+            `💬 <b>Yangi narx taklifi</b>\n\n` +
+            `🐴 ${this.escapeHtml(listing.title)}\n` +
+            `🏷 Sizning narxingiz: <b>${this.escapeHtml(listing.price)}</b>\n` +
+            `💰 Taklif: <b>${this.escapeHtml(offer.amount)}</b>\n` +
+            `👤 ${this.escapeHtml(buyerName)}` +
+            (offer.message ? `\n\n📝 ${this.escapeHtml(offer.message)}` : '');
+        const keyboard: any[][] = [[
+            { text: '✅ Qabul qilish', callback_data: `offer:a:${offer.id}` },
+            { text: '❌ Rad etish', callback_data: `offer:r:${offer.id}` },
+        ]];
+        if (this.miniAppUrl) keyboard.push([{ text: "📱 E'lonni ochish", web_app: { url: `${this.miniAppUrl}/listings/${listing.id}` } }]);
+        try {
+            await this.bot.telegram.sendMessage(sellerTelegramId, text, { parse_mode: 'HTML', reply_markup: { inline_keyboard: keyboard } });
+        } catch (error) {
+            this.logger.error(`❌ Failed to notify seller (price offer): ${error.message}`);
+        }
+    }
+
+    /** Xaridorga taklif natijasi; qabul qilinsa sotuvchi kontakti ham yuboriladi */
+    async notifyPriceOfferResult(
+        buyerTelegramId: string,
+        accepted: boolean,
+        listing: { id: string; title: string },
+        amount: string,
+        sellerContact?: { name?: string | null; phone?: string | null; telegram?: string | null },
+    ): Promise<void> {
+        let text = accepted
+            ? `✅ <b>Taklifingiz qabul qilindi!</b>\n\n🐴 ${this.escapeHtml(listing.title)}\n💰 ${this.escapeHtml(amount)}\n\nSotuvchi bilan bog'laning:`
+            : `❌ <b>Taklifingiz rad etildi</b>\n\n🐴 ${this.escapeHtml(listing.title)}\n💰 ${this.escapeHtml(amount)}\n\nBoshqa narx taklif qilib ko'rishingiz mumkin.`;
+        if (accepted && sellerContact) {
+            if (sellerContact.name) text += `\n👤 ${this.escapeHtml(sellerContact.name)}`;
+            if (sellerContact.phone) text += `\n📞 ${this.escapeHtml(sellerContact.phone)}`;
+            if (sellerContact.telegram) text += `\n✈️ @${this.escapeHtml(sellerContact.telegram.replace(/^@/, ''))}`;
+        }
+        try {
+            await this.bot.telegram.sendMessage(buyerTelegramId, text, {
+                parse_mode: 'HTML',
+                ...this.miniAppButton("📱 E'lonni ochish", `/listings/${listing.id}`),
+            });
+        } catch (error) {
+            this.logger.error(`❌ Failed to notify buyer (offer result): ${error.message}`);
+        }
+    }
+
+    // ---------- Shikoyat ----------
+
+    async notifyAdminReport(report: { listingId: string; listingTitle: string; reason: string; comment?: string | null; reporterName: string }): Promise<void> {
+        if (!this.adminChatIds.length) return;
+        const text =
+            `🚩 <b>Yangi shikoyat</b>\n\n` +
+            `🐴 ${this.escapeHtml(report.listingTitle)}\n` +
+            `📌 Sabab: ${this.escapeHtml(report.reason)}\n` +
+            (report.comment ? `📝 ${this.escapeHtml(report.comment)}\n` : '') +
+            `👤 ${this.escapeHtml(report.reporterName)}`;
+        const extra = this.miniAppButton("📱 E'lonni ko'rish", `/listings/${report.listingId}`);
+        for (const chatId of this.adminChatIds) {
+            try {
+                await this.bot.telegram.sendMessage(chatId, text, { parse_mode: 'HTML', ...extra });
+            } catch (error) {
+                this.logger.error(`❌ Failed to notify admin ${chatId} (report): ${error.message}`);
+            }
+        }
+    }
+
+    // ---------- Sharh ----------
+
+    async notifyNewReview(sellerTelegramId: string, sellerId: string, stars: number, reviewerName: string, comment?: string | null): Promise<void> {
+        const text =
+            `⭐ <b>Sizga yangi baho qoldirildi</b>\n\n` +
+            `${'★'.repeat(stars)}${'☆'.repeat(5 - stars)}\n` +
+            `👤 ${this.escapeHtml(reviewerName)}` +
+            (comment ? `\n\n“${this.escapeHtml(comment)}”` : '');
+        try {
+            await this.bot.telegram.sendMessage(sellerTelegramId, text, {
+                parse_mode: 'HTML',
+                ...this.miniAppButton('📱 Javob yozish', `/sellers/${sellerId}`),
+            });
+        } catch (error) {
+            this.logger.error(`❌ Failed to notify seller (review): ${error.message}`);
+        }
+    }
+
     async notifyUserListingResult(
         telegramUserId: string,
         action: 'approved' | 'rejected',

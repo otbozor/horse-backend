@@ -16,6 +16,7 @@ import { BlogModule } from './blog/blog.module';
 import { ProductsModule } from './products/products.module';
 import { PaymentModule } from './payments/payment.module';
 import { CommentsModule } from './comments/comments.module';
+import { TrustModule } from './trust/trust.module';
 
 @Module({
     imports: [
@@ -59,6 +60,9 @@ import { CommentsModule } from './comments/comments.module';
 
         // Comments
         CommentsModule,
+
+        // Shikoyat, sharh, narx taklifi, narx tarixi
+        TrustModule,
     ],
 })
 export class AppModule { }
