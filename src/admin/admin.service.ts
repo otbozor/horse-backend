@@ -2,6 +2,7 @@ import { Injectable, ForbiddenException, NotFoundException, UnauthorizedExceptio
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramChannelService } from '../telegram/telegram-channel.service';
 import { SavedSearchService } from '../engagement/saved-search.service';
+import { GrowthService } from '../growth/growth.service';
 import { ListingStatus, SaleSource, Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
@@ -17,6 +18,7 @@ export class AdminService {
         private prisma: PrismaService,
         private telegramNotify: TelegramChannelService,
         private savedSearches: SavedSearchService,
+        private growth: GrowthService,
     ) { }
 
     // Check if user is admin
@@ -293,6 +295,8 @@ export class AdminService {
             }
             // Saqlangan qidiruvlarga mos foydalanuvchilarga bot xabari
             this.savedSearches.notifyMatches(listingId).catch(() => { });
+            // Taklif qilingan foydalanuvchining birinchi e'loni - referal mukofoti
+            this.growth.rewardReferralIfEligible(listing.userId).catch(() => { });
         }
 
         const { user: _user, ...listingData } = listing;

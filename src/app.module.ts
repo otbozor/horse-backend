@@ -19,6 +19,7 @@ import { CommentsModule } from './comments/comments.module';
 import { TrustModule } from './trust/trust.module';
 import { ServicesCatalogModule } from './services-catalog/services-catalog.module';
 import { EngagementModule } from './engagement/engagement.module';
+import { GrowthModule } from './growth/growth.module';
 
 @Module({
     imports: [
@@ -71,6 +72,9 @@ import { EngagementModule } from './engagement/engagement.module';
 
         // Saqlangan qidiruv va "Ot kerak" so'rovlari
         EngagementModule,
+
+        // Ommaviy xabar, bannerlar, referal
+        GrowthModule,
     ],
 })
 export class AppModule { }

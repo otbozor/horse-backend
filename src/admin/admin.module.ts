@@ -12,9 +12,10 @@ import { MediaModule } from '../media/media.module';
 import { EventsModule } from '../events/events.module';
 import { TelegramModule } from '../telegram/telegram.module';
 import { EngagementModule } from '../engagement/engagement.module';
+import { GrowthModule } from '../growth/growth.module';
 
 @Module({
-    imports: [BlogModule, MediaModule, EventsModule, TelegramModule, EngagementModule],
+    imports: [BlogModule, MediaModule, EventsModule, TelegramModule, EngagementModule, GrowthModule],
     controllers: [
         AdminController,
         AdminListingsController,

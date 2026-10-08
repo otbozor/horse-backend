@@ -24,6 +24,8 @@ model User {
   lastLoginAt          DateTime?         @map("last_login_at")
   listingCredits       Int               @default(3) @map("listing_credits")
   hasUnlimitedListings Boolean           @default(false) @map("has_unlimited_listings")
+  referredById         String?           @map("referred_by_id")
+  referralRewardedAt   DateTime?         @map("referral_rewarded_at")
   auditLogs            AuditLog[]
   comments             Comment[]
   favorites            Favorite[]
@@ -40,6 +42,7 @@ model User {
   savedSearches        SavedSearch[]
   horseRequests        HorseRequest[]
   requestResponses     RequestResponse[]
+  broadcasts           Broadcast[]
 
   @@map("users")
 }
@@ -721,4 +724,50 @@ enum HorseRequestStatus {
 enum PaymentMethod {
   CLICK
   STARS
+}
+
+// ---------- O'sish: ommaviy xabar va bannerlar ----------
+
+model Broadcast {
+  id          String          @id @default(uuid())
+  text        String
+  imageUrl    String?         @map("image_url")
+  buttonText  String?         @map("button_text")
+  buttonPath  String?         @map("button_path")
+  audience    String          @default("ALL")
+  status      BroadcastStatus @default(SENDING)
+  total       Int             @default(0)
+  sent        Int             @default(0)
+  failed      Int             @default(0)
+  createdById String          @map("created_by_id")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  finishedAt  DateTime?       @map("finished_at")
+  createdBy   User            @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@map("broadcasts")
+}
+
+model Banner {
+  id        String    @id @default(uuid())
+  title     String
+  subtitle  String?
+  imageUrl  String?   @map("image_url")
+  link      String?
+  bgColor   String?   @map("bg_color")
+  isActive  Boolean   @default(true) @map("is_active")
+  sortOrder Int       @default(0) @map("sort_order")
+  startsAt  DateTime? @map("starts_at")
+  endsAt    DateTime? @map("ends_at")
+  clicks    Int       @default(0)
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([isActive, sortOrder])
+  @@map("banners")
+}
+
+enum BroadcastStatus {
+  SENDING
+  DONE
+  FAILED
 }
