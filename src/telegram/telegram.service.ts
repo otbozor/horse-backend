@@ -19,10 +19,20 @@ export class TelegramBotService {
             : undefined;
 
         if (!startPayload) {
+            const miniAppUrl = process.env.MINI_APP_URL;
             await ctx.reply(
                 '🐴 *Otbozor platformasiga xush kelibsiz!*\n\n' +
-                'Login qilish uchun veb saytdan "Telegram orqali kirish" tugmasini bosing.',
-                { parse_mode: 'Markdown' }
+                (miniAppUrl
+                    ? 'Ot sotish va sotib olish endi Telegram ichida — quyidagi tugmani bosing 👇'
+                    : 'Login qilish uchun veb saytdan "Telegram orqali kirish" tugmasini bosing.'),
+                {
+                    parse_mode: 'Markdown',
+                    ...(miniAppUrl && {
+                        reply_markup: {
+                            inline_keyboard: [[{ text: '🐴 Otbozorni ochish', web_app: { url: miniAppUrl } }]],
+                        },
+                    }),
+                }
             );
             return;
         }

@@ -41,6 +41,7 @@ async function bootstrap() {
         // ngrok URLs (development)
         'https://soloistic-heartlessly-audie.ngrok-free.dev',
         process.env.APP_URL,
+        process.env.MINI_APP_URL,
         ...(process.env.CORS_ORIGIN?.split(',').map(s => s.trim()) || []),
     ].filter(Boolean);
 

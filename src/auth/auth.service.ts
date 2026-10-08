@@ -6,6 +6,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TelegramAuthDto, TelegramCallbackDto, AdminLoginDto } from './dto/auth.dto';
 import { v4 as uuidv4 } from 'uuid';
 import * as bcrypt from 'bcrypt';
+import { User } from '@prisma/client';
+import { verifyTelegramInitData } from './telegram-init-data';
 
 export interface JwtPayload {
     sub: string;
@@ -362,6 +364,55 @@ export class AuthService {
 
         res.clearCookie('accessToken', cookieOptions);
         res.clearCookie('refreshToken', cookieOptions);
+    }
+
+    // Telegram Mini App: initData imzosini tekshirib, foydalanuvchini topadi yoki yaratadi.
+    // Mini App ichida telefon raqami so'ralmaydi - u e'lon joylashda kiritiladi.
+    async loginWithTelegramWebApp(initData: string): Promise<{ user: User; tokens: TokenPair }> {
+        const botToken = this.configService.get<string>('TELEGRAM_BOT_TOKEN');
+        if (!botToken) {
+            throw new UnauthorizedException('TELEGRAM_BOT_TOKEN sozlanmagan');
+        }
+
+        const parsed = verifyTelegramInitData(initData, botToken);
+        if (!parsed) {
+            throw new UnauthorizedException("initData imzosi noto'g'ri yoki muddati o'tgan");
+        }
+
+        const tg = parsed.user;
+        const telegramUserId = BigInt(tg.id);
+        const displayName = [tg.first_name, tg.last_name].filter(Boolean).join(' ') || `User ${tg.id}`;
+
+        let user = await this.prisma.user.findUnique({ where: { telegramUserId } });
+
+        if (!user) {
+            user = await this.prisma.user.create({
+                data: {
+                    telegramUserId,
+                    telegramUsername: tg.username || `user_${tg.id}`,
+                    displayName,
+                    avatarUrl: tg.photo_url,
+                    isVerified: true,
+                    status: 'ACTIVE',
+                    lastLoginAt: new Date(),
+                },
+            });
+        } else {
+            if (user.status !== 'ACTIVE') {
+                throw new UnauthorizedException('Foydalanuvchi bloklangan');
+            }
+            user = await this.prisma.user.update({
+                where: { id: user.id },
+                data: {
+                    telegramUsername: tg.username || user.telegramUsername,
+                    avatarUrl: user.avatarUrl || tg.photo_url,
+                    lastLoginAt: new Date(),
+                },
+            });
+        }
+
+        const tokens = await this.generateTokens(user.id, telegramUserId);
+        return { user, tokens };
     }
 
     // DEV ONLY: Telegram botni simulatsiya qilmasdan test login

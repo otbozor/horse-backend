@@ -179,6 +179,11 @@ export class UpdateListingDto {
 }
 
 export class ListingsFilterDto {
+    @ApiPropertyOptional({ description: 'Seller (user) ID' })
+    @IsOptional()
+    @IsUUID()
+    userId?: string;
+
     @ApiPropertyOptional()
     @IsOptional()
     @IsUUID()
