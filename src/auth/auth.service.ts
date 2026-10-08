@@ -393,6 +393,12 @@ export class AuthService {
         let user = await this.prisma.user.findUnique({ where: { telegramUserId } });
 
         if (!user) {
+            let referredById: string | undefined;
+            const ref = parsed.startParam?.startsWith('ref_') ? parsed.startParam.slice(4) : undefined;
+            if (ref && /^[0-9a-f-]{36}$/i.test(ref)) {
+                const inviter = await this.prisma.user.findUnique({ where: { id: ref }, select: { id: true } });
+                referredById = inviter?.id;
+            }
             user = await this.prisma.user.create({
                 data: {
                     telegramUserId,
@@ -403,6 +409,7 @@ export class AuthService {
                     isAdmin: isBootstrapAdmin,
                     status: 'ACTIVE',
                     lastLoginAt: new Date(),
+                    referredById,
                 },
             });
         } else {
