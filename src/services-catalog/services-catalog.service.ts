@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ViewDedupe } from '../common/viewer.util';
 import { Prisma, ServiceCategory, ServiceStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramChannelService } from '../telegram/telegram-channel.service';
@@ -127,8 +128,15 @@ export class ServicesCatalogService {
         return this.serialize(s);
     }
 
-    async trackView(id: string) {
-        await this.prisma.serviceListing.updateMany({ where: { id, status: ServiceStatus.APPROVED }, data: { viewCount: { increment: 1 } } });
+    private readonly viewDedupe = new ViewDedupe();
+
+    /** Bir ko'ruvchi 24 soatda bir marta sanaladi, egasi sanalmaydi */
+    async trackView(id: string, viewerKey: string, userId?: string) {
+        if (!this.viewDedupe.hit(`${id}:${viewerKey}`)) return;
+        await this.prisma.serviceListing.updateMany({
+            where: { id, status: ServiceStatus.APPROVED, ...(userId ? { NOT: { userId } } : {}) },
+            data: { viewCount: { increment: 1 } },
+        });
     }
 
     // ---------- Foydalanuvchi ----------

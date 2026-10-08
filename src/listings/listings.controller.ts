@@ -13,6 +13,7 @@ import { Request } from 'express';
 import { ListingsService } from './listings.service';
 import { ListingsFilterDto } from './dto/listing.dto';
 import { Public } from '../common/decorators/public.decorator';
+import { anonViewerKey, optionalUserId } from '../common/viewer.util';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { User } from '@prisma/client';
@@ -79,9 +80,9 @@ export class ListingsController {
     @Public()
     @ApiOperation({ summary: 'Track listing view (called from browser)' })
     async trackView(@Param('id') id: string, @Req() req: Request): Promise<ApiResponse<null>> {
-        const user = req.user as User | undefined;
-        const sessionId = req.cookies?.sessionId;
-        this.listingsService.incrementViewCount(id, user?.id, sessionId).catch(() => { });
+        // Route guard'siz: token bo'lsa foydalanuvchi bo'yicha, bo'lmasa sessiya/IP bo'yicha sanaladi
+        const userId = (req.user as User | undefined)?.id ?? optionalUserId(req);
+        this.listingsService.incrementViewCount(id, userId, userId ? undefined : anonViewerKey(req)).catch(() => { });
         return {
             success: true,
             message: 'View tracked',

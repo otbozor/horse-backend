@@ -208,6 +208,11 @@ export class ListingsService {
     }
 
     async incrementViewCount(id: string, userId?: string, sessionId?: string) {
+        // Faqat faol e'lon sanaladi, egasining o'z ko'rishlari hisobga olinmaydi
+        const listing = await this.prisma.horseListing.findUnique({ where: { id }, select: { userId: true, status: true } });
+        if (!listing || listing.status !== ListingStatus.APPROVED || listing.userId === userId) return;
+        if (!userId && !sessionId) return;
+
         // Logged-in user: count only once ever (no time limit)
         if (userId) {
             const existing = await this.prisma.viewLog.findFirst({
@@ -340,15 +345,37 @@ export class ListingsService {
         if (dto.contactPhone !== undefined) updateData.contactPhone = dto.contactPhone;
         if (dto.contactTelegram !== undefined) updateData.contactTelegram = dto.contactTelegram;
 
-        // Admin tahrirlasa status o'zgarmaydi, oddiy user tahrirlasa DRAFT bo'ladi
-        if (!user?.isAdmin) {
-            updateData.status = ListingStatus.DRAFT;
+        // Admin boshqa birovning e'lonini tahrirlasa status o'zgarmaydi.
+        // Egasi (admin bo'lsa ham) tahrirlasa: to'langan faol/tekshiruvdagi e'lon darhol
+        // qayta moderatsiyaga tushadi, qolganlari qoralamaga qaytib qayta yuboriladi.
+        const editingOwn = listing.userId === userId;
+        let resubmitted = false;
+        if (editingOwn || !user?.isAdmin) {
+            const reviewable: ListingStatus[] = [ListingStatus.APPROVED, ListingStatus.PENDING, ListingStatus.REJECTED];
+            if (listing.isPaid && reviewable.includes(listing.status)) {
+                updateData.status = ListingStatus.PENDING;
+                resubmitted = true;
+            } else {
+                updateData.status = ListingStatus.DRAFT;
+            }
         }
 
-        return this.prisma.horseListing.update({
+        const updated = await this.prisma.horseListing.update({
             where: { id },
             data: updateData,
         });
+
+        if (resubmitted) {
+            const editor = await this.prisma.user.findUnique({ where: { id: userId }, select: { displayName: true } });
+            this.telegramNotify.notifyAdminNewListing({
+                id,
+                title: updated.title,
+                userId,
+                userName: editor?.displayName ? `${editor.displayName} (tahrirlangan)` : 'Tahrirlangan e\'lon',
+            }).catch(() => { });
+        }
+
+        return updated;
     }
 
     async submitForReview(userId: string, id: string): Promise<HorseListing> {
