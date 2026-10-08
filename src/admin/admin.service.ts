@@ -247,12 +247,15 @@ export class AdminService {
         // Check if this is first-time approval (publishedAt is null)
         const existingListing = await this.prisma.horseListing.findUnique({
             where: { id: listingId },
-            select: { publishedAt: true },
+            select: { publishedAt: true, expiresAt: true },
         });
         const isFirstTimeApproval = !existingListing?.publishedAt;
 
         const now = new Date();
-        const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+        // Tahrirdan keyin qayta tasdiqlanganda muddat qaytadan 30 kunga uzaymaydi
+        const expiresAt = !isFirstTimeApproval && existingListing?.expiresAt && existingListing.expiresAt > now
+            ? existingListing.expiresAt
+            : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
         const listing = await this.prisma.horseListing.update({
             where: { id: listingId },
             data: {

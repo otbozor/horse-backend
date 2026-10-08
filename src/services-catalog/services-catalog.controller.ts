@@ -1,4 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { anonViewerKey } from '../common/viewer.util';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsEnum, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min, ValidateNested } from 'class-validator';
@@ -108,8 +109,9 @@ export class ServicesCatalogController {
     }
 
     @Post('services/:id/view')
-    async view(@Param('id') id: string) {
-        this.services.trackView(id).catch(() => { });
+    async view(@Param('id') id: string, @Req() req: Request) {
+        const viewer = await this.optionalViewer(req);
+        this.services.trackView(id, viewer?.id ?? anonViewerKey(req), viewer?.id).catch(() => { });
         return ok(null);
     }
 
