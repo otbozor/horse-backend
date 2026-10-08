@@ -26,6 +26,7 @@ export class TelegramChannelService {
     private readonly adminChatIds: string[];
     private readonly frontendUrl: string;
     private readonly adminUsername: string;
+    private readonly miniAppUrl: string;
 
     constructor(
         @InjectBot() private readonly bot: Telegraf,
@@ -36,6 +37,7 @@ export class TelegramChannelService {
         this.adminChatIds = raw.split(',').map(s => s.trim()).filter(Boolean);
         this.frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://otbozor.uz';
         this.adminUsername = this.configService.get<string>('TELEGRAM_ADMIN_USERNAME') || '@otbozor_admin';
+        this.miniAppUrl = (this.configService.get<string>('MINI_APP_URL') || '').replace(/\/$/, '');
     }
 
     async postListingToChannel(listing: ListingForChannel): Promise<void> {
@@ -119,9 +121,11 @@ export class TelegramChannelService {
             (listing.userName ? `👤 ${this.escapeHtml(listing.userName)}\n` : '') +
             `\n<a href="${adminLink}">Admin panelda ko'rish →</a>`;
 
+        // Admin to'g'ridan-to'g'ri Mini App'da ochib, tasdiqlash/rad etishi mumkin
+        const extra = this.miniAppButton("📱 Mini App'da ko'rib chiqish", `/listings/${listing.id}`);
         for (const chatId of this.adminChatIds) {
             try {
-                await this.bot.telegram.sendMessage(chatId, text, { parse_mode: 'HTML' });
+                await this.bot.telegram.sendMessage(chatId, text, { parse_mode: 'HTML', ...extra });
             } catch (error) {
                 this.logger.error(`❌ Failed to notify admin ${chatId} (new listing): ${error.message}`);
             }
@@ -146,6 +150,12 @@ export class TelegramChannelService {
         }
     }
 
+    /** MINI_APP_URL berilgan bo'lsa, xabarga Mini App'ni ochadigan web_app tugma qo'shadi. */
+    private miniAppButton(text: string, path: string) {
+        if (!this.miniAppUrl) return {};
+        return { reply_markup: { inline_keyboard: [[{ text, web_app: { url: `${this.miniAppUrl}${path}` } }]] } };
+    }
+
     async notifyUserListingResult(
         telegramUserId: string,
         action: 'approved' | 'rejected',
@@ -163,7 +173,10 @@ export class TelegramChannelService {
                 (rejectReason ? `\n📝 Sabab: ${this.escapeHtml(rejectReason)}\n` : '') +
                 `\n<a href="${myListingsLink}">Mening e'lonlarim →</a>`;
 
-            await this.bot.telegram.sendMessage(telegramUserId, text, { parse_mode: 'HTML' });
+            await this.bot.telegram.sendMessage(telegramUserId, text, {
+                parse_mode: 'HTML',
+                ...this.miniAppButton("📱 Mini App'da ochish", action === 'approved' ? `/listings/${listing.id}` : '/my-listings'),
+            });
         } catch (error) {
             this.logger.error(`❌ Failed to notify user (listing ${action}): ${error.message}`);
         }

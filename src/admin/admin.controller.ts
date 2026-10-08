@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Query, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Query, Param, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AdminService } from './admin.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -53,15 +53,38 @@ export class AdminController {
         @Query('page') page?: number,
         @Query('limit') limit?: number,
         @Query('status') status?: string,
+        @Query('q') q?: string,
     ): Promise<ApiResponse<any>> {
         await this.adminService.requireAdmin(user.id);
-        const data = await this.adminService.getUsers(page, limit, status);
+        const data = await this.adminService.getUsers(page, limit, status, q);
         return {
             success: true,
             data,
             message: 'Users retrieved successfully',
             timestamp: new Date().toISOString(),
         };
+    }
+
+    @Get('admins')
+    @ApiOperation({ summary: "Adminlar ro'yxati" })
+    async getAdmins(@CurrentUser() user: User): Promise<ApiResponse<any>> {
+        await this.adminService.requireAdmin(user.id);
+        const data = await this.adminService.getAdmins();
+        return { success: true, data, message: 'Admins retrieved', timestamp: new Date().toISOString() };
+    }
+
+    @Post('admins')
+    @ApiOperation({ summary: "Admin qo'shish (Telegram ID, @username yoki telefon)" })
+    async addAdmin(@CurrentUser() user: User, @Body('identifier') identifier: string): Promise<ApiResponse<any>> {
+        const data = await this.adminService.addAdmin(identifier, user.id);
+        return { success: true, data, message: 'Admin added', timestamp: new Date().toISOString() };
+    }
+
+    @Delete('admins/:id')
+    @ApiOperation({ summary: 'Admin huquqini olib tashlash' })
+    async removeAdmin(@CurrentUser() user: User, @Param('id') id: string): Promise<ApiResponse<any>> {
+        const data = await this.adminService.removeAdmin(id, user.id);
+        return { success: true, data, message: 'Admin removed', timestamp: new Date().toISOString() };
     }
 
     @Post('users/:id/ban')

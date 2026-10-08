@@ -129,6 +129,7 @@ export class EventsService {
                 endsAt: data.endsAt ? new Date(data.endsAt) : null,
                 organizerName: data.organizerName,
                 contactTelegram: data.contactTelegram || null,
+                contactPhone: data.contactPhone || null,
                 prizePool: data.prizePool || null,
                 rules: data.rules || null,
                 status: data.status === 'PUBLISHED' ? EventStatus.PUBLISHED : EventStatus.DRAFT,
@@ -153,6 +154,7 @@ export class EventsService {
         if (data.endsAt !== undefined) updateData.endsAt = data.endsAt ? new Date(data.endsAt) : null;
         if (data.organizerName !== undefined) updateData.organizerName = data.organizerName;
         if (data.contactTelegram !== undefined) updateData.contactTelegram = data.contactTelegram || null;
+        if (data.contactPhone !== undefined) updateData.contactPhone = data.contactPhone || null;
         if (data.prizePool !== undefined) updateData.prizePool = data.prizePool || null;
         if (data.rules !== undefined) updateData.rules = data.rules || null;
         if (data.status !== undefined) updateData.status = data.status;
