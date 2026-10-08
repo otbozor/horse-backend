@@ -36,6 +36,7 @@ model User {
   reviewsGiven         SellerReview[]    @relation("ReviewsGiven")
   reviewsReceived      SellerReview[]    @relation("ReviewsReceived")
   priceOffers          PriceOffer[]
+  services             ServiceListing[]
 
   @@map("users")
 }
@@ -71,6 +72,7 @@ model Region {
   events    Event[]
   listings  HorseListing[]
   products  Product[]
+  services  ServiceListing[]
 
   @@map("regions")
 }
@@ -85,6 +87,7 @@ model District {
   events   Event[]
   listings HorseListing[]
   products Product[]
+  services ServiceListing[]
 
   @@index([regionId])
   @@map("districts")
@@ -571,4 +574,66 @@ enum PriceOfferStatus {
   ACCEPTED
   REJECTED
   CANCELLED
+}
+
+// ---------- Xizmatlar katalogi (veterinar, taqachi, ot tashish...) ----------
+
+model ServiceListing {
+  id              String          @id @default(uuid())
+  userId          String          @map("user_id")
+  category        ServiceCategory
+  title           String
+  description     String?
+  regionId        String?         @map("region_id")
+  districtId      String?         @map("district_id")
+  priceFrom       Decimal?        @map("price_from") @db.Decimal(15, 2)
+  priceNote       String?         @map("price_note")
+  contactName     String?         @map("contact_name")
+  contactPhone    String?         @map("contact_phone")
+  contactTelegram String?         @map("contact_telegram")
+  status          ServiceStatus   @default(PENDING)
+  rejectReason    String?         @map("reject_reason")
+  viewCount       Int             @default(0) @map("view_count")
+  publishedAt     DateTime?       @map("published_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  region          Region?         @relation(fields: [regionId], references: [id])
+  district        District?       @relation(fields: [districtId], references: [id])
+  media           ServiceMedia[]
+
+  @@index([status, category])
+  @@index([userId])
+  @@index([regionId])
+  @@map("service_listings")
+}
+
+model ServiceMedia {
+  id        String         @id @default(uuid())
+  serviceId String         @map("service_id")
+  url       String
+  sortOrder Int            @default(0) @map("sort_order")
+  service   ServiceListing @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId])
+  @@map("service_media")
+}
+
+enum ServiceCategory {
+  VETERINAR
+  TAQACHI
+  OT_TASHISH
+  CHAVANDOZ
+  MURABBIY
+  OT_BOQISH
+  EGAR_USTASI
+  YEM_YETKAZISH
+  BOSHQA
+}
+
+enum ServiceStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ARCHIVED
 }

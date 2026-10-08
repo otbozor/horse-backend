@@ -210,6 +210,39 @@ export class TelegramChannelService {
         }
     }
 
+    // ---------- Xizmatlar ----------
+
+    async notifyAdminNewService(service: { id: string; title: string; category: string; userName?: string }): Promise<void> {
+        if (!this.adminChatIds.length) return;
+        const text =
+            `🛠 <b>Yangi xizmat tasdiqlash kutmoqda</b>\n\n` +
+            `📌 ${this.escapeHtml(service.category)}\n` +
+            `📝 ${this.escapeHtml(service.title)}\n` +
+            (service.userName ? `👤 ${this.escapeHtml(service.userName)}` : '');
+        const extra = this.miniAppButton("📱 Mini App'da ko'rib chiqish", `/services/${service.id}`);
+        for (const chatId of this.adminChatIds) {
+            try {
+                await this.bot.telegram.sendMessage(chatId, text, { parse_mode: 'HTML', ...extra });
+            } catch (error) {
+                this.logger.error(`❌ Failed to notify admin ${chatId} (new service): ${error.message}`);
+            }
+        }
+    }
+
+    async notifyUserServiceResult(telegramUserId: string, approved: boolean, service: { id: string; title: string }, reason?: string): Promise<void> {
+        const text = approved
+            ? `✅ <b>Xizmatingiz katalogga qo'shildi!</b>\n\n🛠 ${this.escapeHtml(service.title)}`
+            : `❌ <b>Xizmatingiz rad etildi</b>\n\n🛠 ${this.escapeHtml(service.title)}` + (reason ? `\n📝 Sabab: ${this.escapeHtml(reason)}` : '');
+        try {
+            await this.bot.telegram.sendMessage(telegramUserId, text, {
+                parse_mode: 'HTML',
+                ...this.miniAppButton("📱 Mini App'da ochish", approved ? `/services/${service.id}` : '/my-listings'),
+            });
+        } catch (error) {
+            this.logger.error(`❌ Failed to notify user (service result): ${error.message}`);
+        }
+    }
+
     // ---------- Shikoyat ----------
 
     async notifyAdminReport(report: { listingId: string; listingTitle: string; reason: string; comment?: string | null; reporterName: string }): Promise<void> {
