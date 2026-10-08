@@ -2,6 +2,15 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectBot } from 'nestjs-telegraf';
 import { ConfigService } from '@nestjs/config';
 import { Telegraf } from 'telegraf';
+import { PrismaService } from '../prisma/prisma.service';
+
+export interface ChannelConfig {
+    enabled: boolean;
+    /** Bot post yuboradigan chat: @username yoki -100... */
+    chatId: string;
+    /** Ommaviy havola (captionlar va mini app uchun) */
+    url: string;
+}
 
 interface ListingForChannel {
     id: string;
@@ -31,6 +40,7 @@ export class TelegramChannelService {
     constructor(
         @InjectBot() private readonly bot: Telegraf,
         private readonly configService: ConfigService,
+        private readonly prisma: PrismaService,
     ) {
         this.channelId = this.configService.get<string>('TELEGRAM_CHANNEL_ID') || '';
         const raw = this.configService.get<string>('TELEGRAM_ADMIN_CHAT_IDS') || '';
@@ -40,11 +50,31 @@ export class TelegramChannelService {
         this.miniAppUrl = (this.configService.get<string>('MINI_APP_URL') || '').replace(/\/$/, '');
     }
 
-    async postListingToChannel(listing: ListingForChannel): Promise<void> {
-        if (!this.channelId) {
-            this.logger.warn('TELEGRAM_CHANNEL_ID not set — skipping channel post');
-            return;
+    /** Kanal sozlamalari: admin paneldagi qiymatlar env'dagidan ustun turadi */
+    async getChannelConfig(): Promise<ChannelConfig> {
+        const rows = await this.prisma.appSetting.findMany({ where: { key: { in: ['channel_enabled', 'channel_chat_id'] } } });
+        const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
+        const chatId = (map.channel_chat_id ?? this.channelId).trim();
+        return { enabled: map.channel_enabled !== 'false' && Boolean(chatId), chatId, url: TelegramChannelService.publicUrl(chatId) };
+    }
+
+    static publicUrl(chatId: string): string {
+        return chatId.startsWith('@') ? `https://t.me/${chatId.slice(1)}` : 'https://t.me/otbozor_rasmiy';
+    }
+
+    /** Post yuborish kerak bo'lsa kanal sozlamalarini qaytaradi, aks holda null */
+    private async activeChannel(kind: string): Promise<ChannelConfig | null> {
+        const cfg = await this.getChannelConfig();
+        if (!cfg.enabled) {
+            this.logger.log(`Channel posting disabled — skipping ${kind}`);
+            return null;
         }
+        return cfg;
+    }
+
+    async postListingToChannel(listing: ListingForChannel): Promise<void> {
+        const channel = await this.activeChannel(`listing ${listing.id}`);
+        if (!channel) return;
 
         try {
             const priceNum = listing.priceAmount ? Number(listing.priceAmount.toString()) : null;
@@ -72,7 +102,7 @@ export class TelegramChannelService {
             if (age) caption += `<b>${ageEmoji} Yoshi:</b> ${age}\n`;
 
             caption += `\nOtbozor.uz — ot savdosi uchun maxsus yaratilgan platforma.\n\n`;
-            caption += `<b><a href="https://t.me/otbozor_rasmiy">Telegram kanal</a></b> | `;
+            caption += `<b><a href="${channel.url}">Telegram kanal</a></b> | `;
             caption += `<b><a href="https://t.me/otbozor_rasmiy_guruh">Telegram guruh</a></b> | `;
             caption += `<b><a href="https://instagram.com/otbozor.uz">Instagram</a></b>`;
 
@@ -92,14 +122,14 @@ export class TelegramChannelService {
             };
 
             if (images.length === 0) {
-                await this.bot.telegram.sendMessage(this.channelId, caption, {
+                await this.bot.telegram.sendMessage(channel.chatId, caption, {
                     parse_mode: 'HTML',
                     link_preview_options: { is_disabled: false },
                     reply_markup: keyboard,
                 });
             } else {
                 // Faqat birinchi rasmni yuborish (buttonlar bilan)
-                await this.bot.telegram.sendPhoto(this.channelId, images[0].url, {
+                await this.bot.telegram.sendPhoto(channel.chatId, images[0].url, {
                     caption,
                     parse_mode: 'HTML',
                     reply_markup: keyboard,
@@ -424,10 +454,8 @@ export class TelegramChannelService {
         excerpt?: string;
         coverImage?: string;
     }): Promise<void> {
-        if (!this.channelId) {
-            this.logger.warn('TELEGRAM_CHANNEL_ID not set — skipping channel post');
-            return;
-        }
+        const channel = await this.activeChannel(`blog ${post.id}`);
+        if (!channel) return;
 
         try {
             const link = `${this.frontendUrl}/blog/${post.slug}`;
@@ -441,17 +469,17 @@ export class TelegramChannelService {
 
             caption += `<a href="${link}">Maqolani o'qish →</a>\n\n`;
             caption += `<b>Otbozor.uz — ot savdosi uchun maxsus yaratilgan platforma.</b>\n\n`;
-            caption += `<a href="https://t.me/otbozor_rasmiy">Telegram kanal</a> | `;
+            caption += `<a href="${channel.url}">Telegram kanal</a> | `;
             caption += `<a href="https://t.me/otbozor_rasmiy_guruh">Telegram guruh</a> | `;
             caption += `<a href="https://instagram.com/otbozor.uz">Instagram</a>`;
 
             if (post.coverImage) {
-                await this.bot.telegram.sendPhoto(this.channelId, post.coverImage, {
+                await this.bot.telegram.sendPhoto(channel.chatId, post.coverImage, {
                     caption,
                     parse_mode: 'HTML',
                 });
             } else {
-                await this.bot.telegram.sendMessage(this.channelId, caption, {
+                await this.bot.telegram.sendMessage(channel.chatId, caption, {
                     parse_mode: 'HTML',
                     link_preview_options: { is_disabled: false },
                 });
