@@ -4,6 +4,12 @@ import { TelegramChannelService } from '../telegram/telegram-channel.service';
 import { ListingStatus, SaleSource, Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
+// Query parametrlari berilmasa NestJS ularni NaN ga aylantiradi - standart qiymatga qaytaramiz
+function toPage(value: unknown, fallback: number, max = 100): number {
+    const n = Math.floor(Number(value));
+    return Number.isFinite(n) && n > 0 ? Math.min(n, max) : fallback;
+}
+
 @Injectable()
 export class AdminService {
     constructor(
@@ -175,6 +181,8 @@ export class AdminService {
 
     // Moderation queue
     async getPendingListings(page = 1, limit = 20) {
+        page = toPage(page, 1, 100000);
+        limit = toPage(limit, 20);
         const skip = (page - 1) * limit;
 
         const [listings, total] = await Promise.all([
@@ -362,6 +370,8 @@ export class AdminService {
 
     // Users management
     async getUsers(page = 1, limit = 20, status?: string, q?: string) {
+        page = toPage(page, 1, 100000);
+        limit = toPage(limit, 20);
         const where: Prisma.UserWhereInput = {};
         if (status) where.status = status as any;
         const term = q?.trim().replace(/^@/, '');
@@ -545,6 +555,8 @@ export class AdminService {
     }
 
     async getAuditLogs(page = 1, limit = 50) {
+        page = toPage(page, 1, 100000);
+        limit = toPage(limit, 50);
         const skip = (page - 1) * limit;
 
         const [logs, total] = await Promise.all([
