@@ -43,6 +43,7 @@ model User {
   horseRequests        HorseRequest[]
   requestResponses     RequestResponse[]
   broadcasts           Broadcast[]
+  eventRegistrations   EventRegistration[]
 
   @@map("users")
 }
@@ -251,8 +252,14 @@ model Event {
   createdAt       DateTime    @default(now()) @map("created_at")
   updatedAt       DateTime    @updatedAt @map("updated_at")
   publishedAt     DateTime?   @map("published_at")
+  registrationOpen Boolean    @default(false) @map("registration_open")
+  maxParticipants Int?        @map("max_participants")
+  resultsSummary  String?     @map("results_summary")
   district        District?   @relation(fields: [districtId], references: [id])
   region          Region      @relation(fields: [regionId], references: [id])
+  winners         EventWinner[]
+  photos          EventPhoto[]
+  registrations   EventRegistration[]
 
   @@index([regionId])
   @@index([status])
@@ -770,4 +777,58 @@ enum BroadcastStatus {
   SENDING
   DONE
   FAILED
+}
+
+// ---------- Ko'pkari: natijalar va ishtirokchilar ----------
+
+model EventWinner {
+  id        String  @id @default(uuid())
+  eventId   String  @map("event_id")
+  place     Int
+  riderName String  @map("rider_name")
+  horseName String? @map("horse_name")
+  prize     String?
+  event     Event   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@map("event_winners")
+}
+
+model EventPhoto {
+  id        String @id @default(uuid())
+  eventId   String @map("event_id")
+  url       String
+  sortOrder Int    @default(0) @map("sort_order")
+  event     Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@map("event_photos")
+}
+
+model EventRegistration {
+  id         String             @id @default(uuid())
+  eventId    String             @map("event_id")
+  userId     String             @map("user_id")
+  riderName  String             @map("rider_name")
+  phone      String
+  horseName  String?            @map("horse_name")
+  horseBreed String?            @map("horse_breed")
+  note       String?
+  status     RegistrationStatus @default(PENDING)
+  adminNote  String?            @map("admin_note")
+  createdAt  DateTime           @default(now()) @map("created_at")
+  updatedAt  DateTime           @updatedAt @map("updated_at")
+  event      Event              @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+  @@index([eventId, status])
+  @@map("event_registrations")
+}
+
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
 }
