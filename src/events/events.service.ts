@@ -41,6 +41,9 @@ export class EventsService {
         const event = await this.prisma.event.findUnique({
             where: { slug },
             include: {
+                winners: { orderBy: { place: 'asc' } },
+                photos: { orderBy: { sortOrder: 'asc' } },
+                _count: { select: { registrations: { where: { status: 'APPROVED' } } } },
                 region: {
                     select: {
                         nameUz: true,
@@ -82,6 +85,9 @@ export class EventsService {
         if (!filters?.allStatuses) {
             if (filters?.status) {
                 where.status = filters.status;
+            } else if (filters?.past) {
+                // O'tgan tadbirlarda natijasi kiritilgan (COMPLETED) lar ham ko'rinadi
+                where.status = { in: [EventStatus.PUBLISHED, EventStatus.COMPLETED] };
             } else {
                 where.status = EventStatus.PUBLISHED;
             }
@@ -90,7 +96,8 @@ export class EventsService {
         if (filters?.upcoming) {
             where.startsAt = { gte: new Date() };
         } else if (filters?.past) {
-            where.startsAt = { lt: new Date() };
+            // Natijasi kiritilgan tadbir sanasi kelmagan bo'lsa ham "o'tganlar"da ko'rinadi
+            where.OR = [{ startsAt: { lt: new Date() } }, { status: EventStatus.COMPLETED }];
         }
 
         return this.prisma.event.findMany({
@@ -108,9 +115,10 @@ export class EventsService {
                         slug: true,
                     },
                 },
+                _count: { select: { winners: true, registrations: { where: { status: 'APPROVED' } } } },
             },
             orderBy: {
-                startsAt: 'asc',
+                startsAt: filters?.past ? 'desc' : 'asc',
             },
         });
     }
@@ -130,6 +138,8 @@ export class EventsService {
                 organizerName: data.organizerName,
                 contactTelegram: data.contactTelegram || null,
                 contactPhone: data.contactPhone || null,
+                registrationOpen: Boolean(data.registrationOpen),
+                maxParticipants: data.maxParticipants ? Number(data.maxParticipants) : null,
                 prizePool: data.prizePool || null,
                 rules: data.rules || null,
                 status: data.status === 'PUBLISHED' ? EventStatus.PUBLISHED : EventStatus.DRAFT,
@@ -155,6 +165,8 @@ export class EventsService {
         if (data.organizerName !== undefined) updateData.organizerName = data.organizerName;
         if (data.contactTelegram !== undefined) updateData.contactTelegram = data.contactTelegram || null;
         if (data.contactPhone !== undefined) updateData.contactPhone = data.contactPhone || null;
+        if (data.registrationOpen !== undefined) updateData.registrationOpen = Boolean(data.registrationOpen);
+        if (data.maxParticipants !== undefined) updateData.maxParticipants = data.maxParticipants ? Number(data.maxParticipants) : null;
         if (data.prizePool !== undefined) updateData.prizePool = data.prizePool || null;
         if (data.rules !== undefined) updateData.rules = data.rules || null;
         if (data.status !== undefined) updateData.status = data.status;
