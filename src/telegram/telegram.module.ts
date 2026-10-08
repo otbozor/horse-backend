@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TelegramBotService } from './telegram.service';
 import { TelegramChannelService } from './telegram-channel.service';
 import { AuthModule } from '../auth/auth.module';
+import { ChannelSettingsController } from './channel-settings.controller';
 
 @Module({
     imports: [
@@ -16,6 +17,7 @@ import { AuthModule } from '../auth/auth.module';
         }),
         AuthModule,
     ],
+    controllers: [ChannelSettingsController],
     providers: [TelegramBotService, TelegramChannelService],
     exports: [TelegramBotService, TelegramChannelService],
 })
