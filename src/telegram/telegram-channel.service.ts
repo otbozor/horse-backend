@@ -186,9 +186,22 @@ export class TelegramChannelService {
             : { inline_keyboard: [[{ text: "🐴 E'lonni ko'rish", url: this.botAppLink(listingId) }]] };
     }
 
-    private async sendPost(chatId: string, caption: string, reply_markup: any, photo?: string | null) {
+    /** E'lon rasmi: bir nechta bo'lsa kesilmagan kollaj, bitta bo'lsa o'zi, yo'q bo'lsa null */
+    private async listingPhoto(media?: { url: string }[]): Promise<string | Buffer | null> {
+        const urls = (media ?? []).map((m) => m.url).filter(Boolean);
+        if (urls.length > 1) {
+            const collage = await buildCollage(urls).catch((e) => {
+                this.logger.warn(`Collage failed: ${(e as Error).message}`);
+                return null;
+            });
+            if (collage) return collage;
+        }
+        return urls[0] ?? null;
+    }
+
+    private async sendPost(chatId: string, caption: string, reply_markup: any, photo?: string | Buffer | null) {
         return photo
-            ? this.bot.telegram.sendPhoto(chatId, photo, { caption, parse_mode: 'HTML', reply_markup })
+            ? this.bot.telegram.sendPhoto(chatId, typeof photo === 'string' ? photo : { source: photo, filename: 'otbozor.jpg' }, { caption, parse_mode: 'HTML', reply_markup })
             : this.bot.telegram.sendMessage(chatId, caption, { parse_mode: 'HTML', reply_markup, link_preview_options: { is_disabled: true } });
     }
 
@@ -213,7 +226,7 @@ export class TelegramChannelService {
         const channel = await this.activeChannel(`listing ${listing.id}`);
         if (!channel) return;
         try {
-            const photo = listing.media?.find((m) => m.url)?.url ?? null;
+            const photo = await this.listingPhoto(listing.media);
             const msg = await this.sendPost(channel.chatId, this.listingCaption(listing, channel.url), this.listingKeyboard(listing.id, listing.slug, 'active'), photo);
             await this.prisma.channelPost.create({
                 data: { kind: 'LISTING', listingId: listing.id, chatId: channel.chatId, messageId: msg.message_id, isPhoto: Boolean(photo) },
@@ -258,7 +271,7 @@ export class TelegramChannelService {
         const channel = await this.activeChannel(`auction ${listing.id}`);
         if (!channel) return;
         try {
-            const photo = listing.media?.[0]?.url ?? null;
+            const photo = await this.listingPhoto(listing.media);
             const caption = this.auctionCaption(listing, { ...auction, status: 'ACTIVE', currentPrice: null, bidCount: 0 });
             const msg = await this.sendPost(channel.chatId, caption, this.auctionKeyboard(listing.id, true), photo);
             await this.prisma.channelPost.create({
@@ -308,7 +321,7 @@ export class TelegramChannelService {
             priceAmount: 45000000, priceCurrency: 'UZS', ageYears: 5, isPremium: false, isTop: false,
             region: { nameUz: 'Qashqadaryo' }, district: { nameUz: 'Shahrisabz' }, breed: { name: 'Qorabayir' }, media: [],
         };
-        const photo = sample.media?.[0]?.url ?? null;
+        const photo = await this.listingPhoto(sample.media);
         const price = Number(sample.priceAmount?.toString() ?? 0) || 45000000;
         const steps: [string, string, any][] = [
             ['1️⃣ Yangi e\'lon (tasdiqlanganda yoki reklama qilinganda)', this.listingCaption(sample, cfg.url), this.listingKeyboard(sample.id, sample.slug, 'active')],
@@ -342,64 +355,6 @@ export class TelegramChannelService {
         return sent;
     }
 
-
-    /** A usul: bir nechta rasm — bitta kollaj rasm (tugmalar va tahrirlash ishlaydi) */
-    private async sendCollagePost(chatId: string, caption: string, reply_markup: any, urls: string[]) {
-        const collage = urls.length > 1 ? await buildCollage(urls).catch(() => null) : null;
-        if (!collage) return this.sendPost(chatId, caption, reply_markup, urls[0] ?? null);
-        return this.bot.telegram.sendPhoto(chatId, { source: collage, filename: 'otbozor.jpg' }, { caption, parse_mode: 'HTML', reply_markup });
-    }
-
-    /**
-     * B usul: Telegram albomi (10 tagacha rasm). Albomga inline tugma qo'yib bo'lmaydi,
-     * shuning uchun havolalar caption ichida beriladi. Birinchi xabar qaytariladi (tahrirlash shu orqali).
-     */
-    private async sendAlbumPost(chatId: string, caption: string, listingId: string, urls: string[]) {
-        const links = `
-
-📱 <a href="${this.botAppLink(listingId)}">E'lonni ochish</a>  ·  ➕ <a href="${this.appLink('create')}">E'lon joylash</a>`;
-        const media = urls.slice(0, 10).map((url, i) => ({
-            type: 'photo' as const,
-            media: url,
-            ...(i === 0 ? { caption: (caption + links).slice(0, 1024), parse_mode: 'HTML' as const } : {}),
-        }));
-        const msgs = await this.bot.telegram.sendMediaGroup(chatId, media);
-        return msgs[0];
-    }
-
-    /** Admin uchun: ko'p rasmli e'lonning ikki xil ko'rinishini yuborish */
-    async sendMultiPhotoSamples(chatId: string): Promise<void> {
-        const cfg = await this.getChannelConfig();
-        const candidates = await this.prisma.horseListing.findMany({
-            where: { status: 'APPROVED', media: { some: { type: 'IMAGE' } } },
-            orderBy: { publishedAt: 'desc' },
-            take: 30,
-            include: this.listingForChannelInclude,
-        });
-        const l = candidates.sort((a, b) => b.media.length - a.media.length)[0];
-        if (!l) throw new Error("Rasmli e'lon topilmadi");
-        let urls = l.media.map((m) => m.url).filter(Boolean);
-        // Namuna uchun e'londa bitta rasm bo'lsa, boshqa e'lonlar rasmlari bilan to'ldiramiz
-        if (urls.length < 4) {
-            for (const c of candidates) for (const m of c.media) if (urls.length < 5 && !urls.includes(m.url)) urls.push(m.url);
-        }
-        const caption = this.listingCaption(l, cfg.url);
-        const kb = this.listingKeyboard(l.id, l.slug, 'active');
-        const say = (t: string) => this.bot.telegram.sendMessage(chatId, t, { parse_mode: 'HTML' });
-
-        await say(`🖼 <b>Ko'p rasmli e'lon — 2 xil usul</b>
-
-Namunada ${urls.length} ta rasm ishlatildi.`);
-        await say("<i>A) Kollaj — barcha rasmlar bitta rasmga yig'iladi. Tugmalar joyida, post keyin tahrirlanadi (narx, sotildi).</i>");
-        await this.sendCollagePost(chatId, caption, kb, urls);
-        if (urls.length > 2) {
-            await say("<i>A) Kollaj — 2 ta va 3 ta rasm bo'lganda</i>");
-            await this.sendCollagePost(chatId, caption, kb, urls.slice(0, 2));
-            await this.sendCollagePost(chatId, caption, kb, urls.slice(0, 3));
-        }
-        await say("<i>B) Telegram albomi — har bir rasm alohida, varaqlab ko'riladi. Albomga tugma qo'yib bo'lmaydi, shuning uchun havolalar matn ichida.</i>");
-        await this.sendAlbumPost(chatId, caption, l.id, urls);
-    }
 
     async notifyAdminNewListing(listing: { id: string; title: string; userId: string; userName?: string }): Promise<void> {
         if (!this.adminChatIds.length) return;
