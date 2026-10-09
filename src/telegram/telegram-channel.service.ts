@@ -5,6 +5,7 @@ import { Telegraf } from 'telegraf';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationCategory } from '@prisma/client';
+import { buildCollage } from './collage';
 
 export interface ChannelConfig {
     enabled: boolean;
@@ -341,6 +342,64 @@ export class TelegramChannelService {
         return sent;
     }
 
+
+    /** A usul: bir nechta rasm — bitta kollaj rasm (tugmalar va tahrirlash ishlaydi) */
+    private async sendCollagePost(chatId: string, caption: string, reply_markup: any, urls: string[]) {
+        const collage = urls.length > 1 ? await buildCollage(urls).catch(() => null) : null;
+        if (!collage) return this.sendPost(chatId, caption, reply_markup, urls[0] ?? null);
+        return this.bot.telegram.sendPhoto(chatId, { source: collage, filename: 'otbozor.jpg' }, { caption, parse_mode: 'HTML', reply_markup });
+    }
+
+    /**
+     * B usul: Telegram albomi (10 tagacha rasm). Albomga inline tugma qo'yib bo'lmaydi,
+     * shuning uchun havolalar caption ichida beriladi. Birinchi xabar qaytariladi (tahrirlash shu orqali).
+     */
+    private async sendAlbumPost(chatId: string, caption: string, listingId: string, urls: string[]) {
+        const links = `
+
+📱 <a href="${this.botAppLink(listingId)}">E'lonni ochish</a>  ·  ➕ <a href="${this.appLink('create')}">E'lon joylash</a>`;
+        const media = urls.slice(0, 10).map((url, i) => ({
+            type: 'photo' as const,
+            media: url,
+            ...(i === 0 ? { caption: (caption + links).slice(0, 1024), parse_mode: 'HTML' as const } : {}),
+        }));
+        const msgs = await this.bot.telegram.sendMediaGroup(chatId, media);
+        return msgs[0];
+    }
+
+    /** Admin uchun: ko'p rasmli e'lonning ikki xil ko'rinishini yuborish */
+    async sendMultiPhotoSamples(chatId: string): Promise<void> {
+        const cfg = await this.getChannelConfig();
+        const candidates = await this.prisma.horseListing.findMany({
+            where: { status: 'APPROVED', media: { some: { type: 'IMAGE' } } },
+            orderBy: { publishedAt: 'desc' },
+            take: 30,
+            include: this.listingForChannelInclude,
+        });
+        const l = candidates.sort((a, b) => b.media.length - a.media.length)[0];
+        if (!l) throw new Error("Rasmli e'lon topilmadi");
+        let urls = l.media.map((m) => m.url).filter(Boolean);
+        // Namuna uchun e'londa bitta rasm bo'lsa, boshqa e'lonlar rasmlari bilan to'ldiramiz
+        if (urls.length < 4) {
+            for (const c of candidates) for (const m of c.media) if (urls.length < 5 && !urls.includes(m.url)) urls.push(m.url);
+        }
+        const caption = this.listingCaption(l, cfg.url);
+        const kb = this.listingKeyboard(l.id, l.slug, 'active');
+        const say = (t: string) => this.bot.telegram.sendMessage(chatId, t, { parse_mode: 'HTML' });
+
+        await say(`🖼 <b>Ko'p rasmli e'lon — 2 xil usul</b>
+
+Namunada ${urls.length} ta rasm ishlatildi.`);
+        await say("<i>A) Kollaj — barcha rasmlar bitta rasmga yig'iladi. Tugmalar joyida, post keyin tahrirlanadi (narx, sotildi).</i>");
+        await this.sendCollagePost(chatId, caption, kb, urls);
+        if (urls.length > 2) {
+            await say("<i>A) Kollaj — 2 ta va 3 ta rasm bo'lganda</i>");
+            await this.sendCollagePost(chatId, caption, kb, urls.slice(0, 2));
+            await this.sendCollagePost(chatId, caption, kb, urls.slice(0, 3));
+        }
+        await say("<i>B) Telegram albomi — har bir rasm alohida, varaqlab ko'riladi. Albomga tugma qo'yib bo'lmaydi, shuning uchun havolalar matn ichida.</i>");
+        await this.sendAlbumPost(chatId, caption, l.id, urls);
+    }
 
     async notifyAdminNewListing(listing: { id: string; title: string; userId: string; userName?: string }): Promise<void> {
         if (!this.adminChatIds.length) return;
