@@ -342,7 +342,7 @@ export class AuctionsService {
         const me = await this.prisma.user.findUnique({ where: { id: userId }, select: { telegramUserId: true } });
         void this.notify(
             me?.telegramUserId,
-            `✅ <b>Taklifingiz qabul qilindi</b>\n🐴 ${esc(result.listing.title)}\nSizning taklifingiz: <b>${price}</b>${result.extended ? '\n⏱ Auksion 5 daqiqaga uzaytirildi' : ''}\n\nKimdir oshirsa, darhol xabar beramiz.`,
+            `✅ <b>Taklifingiz qayd etildi — hozir eng yuqori taklif sizniki</b>\n🐴 ${esc(result.listing.title)}\nSizning taklifingiz: <b>${price}</b>${result.extended ? '\n⏱ Auksion 5 daqiqaga uzaytirildi' : ''}\n\nKimdir oshirsa, darhol xabar beramiz.`,
             result.listing.id,
         );
 
