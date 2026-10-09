@@ -27,6 +27,8 @@ model User {
   referredById         String?           @map("referred_by_id")
   referralRewardedAt   DateTime?         @map("referral_rewarded_at")
   digestEnabled        Boolean           @default(true) @map("digest_enabled")
+  /// Bot orqali yashirin suhbatda oxirgi faol suhbat (oddiy xabar shu suhbatga ketadi)
+  activeChatThreadId   String?           @map("active_chat_thread_id")
   auditLogs            AuditLog[]
   comments             Comment[]
   favorites            Favorite[]
@@ -46,6 +48,8 @@ model User {
   broadcasts           Broadcast[]
   eventRegistrations   EventRegistration[]
   eventAttendances     EventAttendance[]
+  chatsAsBuyer         ChatThread[]      @relation("ChatBuyer")
+  chatsAsSeller        ChatThread[]      @relation("ChatSeller")
 
   @@map("users")
 }
@@ -165,6 +169,7 @@ model HorseListing {
   priceHistory   PriceHistory[]
   requestResponses RequestResponse[]
   contacts       ListingContact[]
+  chatThreads    ChatThread[]
 
   @@index([userId])
   @@index([regionId])
@@ -759,6 +764,39 @@ model ListingContact {
 
   @@index([listingId, createdAt])
   @@map("listing_contacts")
+}
+
+/// Bot orqali yashirin suhbat: xaridor va sotuvchi raqamlarini ko'rsatmay yozishadi
+model ChatThread {
+  id            String       @id @default(uuid())
+  listingId     String       @map("listing_id")
+  buyerId       String       @map("buyer_id")
+  sellerId      String       @map("seller_id")
+  messageCount  Int          @default(0) @map("message_count")
+  lastMessageAt DateTime?    @map("last_message_at")
+  closedAt      DateTime?    @map("closed_at")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  listing       HorseListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  buyer         User         @relation("ChatBuyer", fields: [buyerId], references: [id], onDelete: Cascade)
+  seller        User         @relation("ChatSeller", fields: [sellerId], references: [id], onDelete: Cascade)
+  relays        ChatRelay[]
+
+  @@unique([listingId, buyerId])
+  @@index([sellerId])
+  @@map("chat_threads")
+}
+
+/// Bot yuborgan xabar → suhbat (reply qilinganda qaysi suhbatga tegishli ekanini topish uchun)
+model ChatRelay {
+  id            String     @id @default(uuid())
+  threadId      String     @map("thread_id")
+  recipientTgId BigInt     @map("recipient_tg_id")
+  tgMessageId   Int        @map("tg_message_id")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  thread        ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([recipientTgId, tgMessageId])
+  @@map("chat_relays")
 }
 
 enum ContactType {

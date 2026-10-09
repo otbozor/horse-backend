@@ -5,6 +5,7 @@ import { AuthService } from '../auth/auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramChannelService } from './telegram-channel.service';
 import { resolvePriceOffer } from '../trust/price-offer-core';
+import { ChatService } from '../chat/chat.service';
 
 @Injectable()
 @Update()
@@ -13,6 +14,7 @@ export class TelegramBotService {
         private readonly authService: AuthService,
         private readonly prisma: PrismaService,
         private readonly channel: TelegramChannelService,
+        private readonly chat: ChatService,
     ) { }
 
     /** Sotuvchi narx taklifini bot xabaridagi tugma orqali qabul qiladi / rad etadi */
@@ -38,6 +40,12 @@ export class TelegramBotService {
         const startPayload = ctx.message && 'text' in ctx.message
             ? ctx.message.text.split(' ')[1]
             : undefined;
+
+        // Sotuvchiga bot orqali yozish: t.me/<bot>?start=chat_<listingId>
+        if (startPayload?.startsWith('chat_')) {
+            await this.chat.openFromDeepLink(ctx, startPayload.slice(5));
+            return;
+        }
 
         if (!startPayload) {
             const miniAppUrl = process.env.MINI_APP_URL;
