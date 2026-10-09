@@ -6,6 +6,7 @@ import { Telegraf } from 'telegraf';
 import type { InlineKeyboardButton } from 'telegraf/types';
 import { EventStatus, ListingStatus, Prisma, UserStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const DAY = 86400000;
 const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -31,6 +32,7 @@ export class DigestService {
         private readonly prisma: PrismaService,
         config: ConfigService,
         @InjectBot() private readonly bot: Telegraf,
+        private readonly notifications: NotificationsService,
     ) {
         this.miniAppUrl = (config.get<string>('MINI_APP_URL') || '').replace(/\/$/, '');
     }
@@ -83,8 +85,8 @@ export class DigestService {
                     if (!text) continue;
                     await this.sendText(u.telegramUserId!.toString(), text);
                     sent++;
-                } catch {
-                    /* botni bloklagan */
+                } catch (e) {
+                    await this.notifications.handleSendError(u.telegramUserId!, e);
                 }
                 await sleep(40);
             }

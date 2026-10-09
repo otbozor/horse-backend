@@ -119,6 +119,7 @@ export class GrowthService {
                 sent++;
             } catch (e) {
                 failed++;
+                await this.notifications.handleSendError(chatIds[i], e);
                 // 429 bo'lsa Telegram aytgan vaqtcha kutamiz va qayta urinamiz
                 const retry = e?.response?.parameters?.retry_after;
                 if (retry) {

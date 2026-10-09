@@ -328,6 +328,7 @@ export class TrustService {
                 data: { priceAmount: value, previousPrice: value < old ? old : null },
             }),
         ]);
+        this.notifier.refreshListingPost(listingId, 'active').catch(() => { });
         return this.prisma.horseListing.findUnique({ where: { id: listingId } });
     }
 }

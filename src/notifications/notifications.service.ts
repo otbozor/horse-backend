@@ -41,6 +41,7 @@ const stripHtml = (s: string) =>
 export class NotificationsService {
     private readonly logger = new Logger(NotificationsService.name);
     private readonly miniAppUrl: string;
+    private readonly adminChatIds: string[];
 
     constructor(
         private readonly prisma: PrismaService,
@@ -48,6 +49,61 @@ export class NotificationsService {
         @InjectBot() private readonly bot: Telegraf,
     ) {
         this.miniAppUrl = (config.get<string>('MINI_APP_URL') || '').replace(/\/$/, '');
+        this.adminChatIds = (config.get<string>('TELEGRAM_ADMIN_CHAT_IDS') || '').split(',').map((x) => x.trim()).filter(Boolean);
+    }
+
+    // =================== Botni bloklaganlar ===================
+
+    static isBlockedError(e: unknown): boolean {
+        const r = (e as { response?: { error_code?: number; description?: string } })?.response;
+        return r?.error_code === 403 && /blocked|deactivated|chat not found/i.test(r.description ?? '');
+    }
+
+    /** Yuborishdagi xato bot bloklangani sababli bo'lsa — belgilaymiz (boshqa servislar ham chaqiradi) */
+    async handleSendError(chatId: string | number | bigint, e: unknown) {
+        if (NotificationsService.isBlockedError(e)) await this.markBlocked(chatId).catch(() => { });
+    }
+
+    /** Foydalanuvchi botni blokladi — birinchi marta aniqlanganda adminlarga xabar */
+    async markBlocked(telegramUserId: string | number | bigint) {
+        const tg = BigInt(telegramUserId.toString());
+        const res = await this.prisma.user.updateMany({ where: { telegramUserId: tg, botBlockedAt: null }, data: { botBlockedAt: new Date() } });
+        if (!res.count) return;
+        const u = await this.prisma.user.findUnique({
+            where: { telegramUserId: tg },
+            select: { displayName: true, telegramUsername: true, phone: true, createdAt: true, _count: { select: { listings: true } } },
+        });
+        if (!u) return;
+        const esc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const tgName = u.telegramUsername && !u.telegramUsername.startsWith('user_') ? ` (@${esc(u.telegramUsername)})` : '';
+        await this.notifyAdmins(
+            `🚫 <b>Botni blokladi</b>
+
+👤 ${esc(u.displayName)}${tgName}` +
+            (u.phone ? `
+📞 ${esc(u.phone)}` : '') +
+            `
+🐴 E'lonlari: ${u._count.listings}
+🗓 Ro'yxatdan o'tgan: ${u.createdAt.toISOString().slice(0, 10)}`,
+        );
+    }
+
+    /** Foydalanuvchi botni qayta ishga tushirdi */
+    async markUnblocked(telegramUserId: string | number | bigint) {
+        const tg = BigInt(telegramUserId.toString());
+        const res = await this.prisma.user.updateMany({ where: { telegramUserId: tg, botBlockedAt: { not: null } }, data: { botBlockedAt: null } });
+        if (!res.count) return;
+        const u = await this.prisma.user.findUnique({ where: { telegramUserId: tg }, select: { displayName: true } });
+        if (u) await this.notifyAdmins(`✅ <b>Botni qayta yoqdi</b>
+
+👤 ${u.displayName.replace(/</g, '&lt;')}`);
+    }
+
+    private async notifyAdmins(html: string) {
+        const markup = this.miniAppUrl ? { inline_keyboard: [[{ text: '📱 Foydalanuvchilar', web_app: { url: `${this.miniAppUrl}/admin` } }]] } : undefined;
+        for (const chatId of this.adminChatIds) {
+            await this.bot.telegram.sendMessage(chatId, html, { parse_mode: 'HTML', reply_markup: markup }).catch(() => { });
+        }
     }
 
     /** Bot xabari yetkazilgan bo'lsa true */
@@ -93,6 +149,7 @@ export class NotificationsService {
             return true;
         } catch (e) {
             this.logger.warn(`Bot notification failed (${input.category}): ${(e as Error).message}`);
+            await this.handleSendError(chatId, e);
             return false;
         }
     }

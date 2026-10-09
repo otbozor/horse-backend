@@ -2,6 +2,8 @@ import { BadRequestException, Body, Controller, Get, Post, Put, UseGuards } from
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
 import { InjectBot } from 'nestjs-telegraf';
+import { User } from '@prisma/client';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Telegraf } from 'telegraf';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
@@ -83,6 +85,19 @@ export class ChannelSettingsController {
             throw new BadRequestException(`Kanalga yuborib bo'lmadi: ${(e as Error).message}`);
         }
         return ok({ sent: true });
+    }
+
+    /** Kanalga tushadigan barcha ko'rinishlarni adminning o'z chatiga yuborish */
+    @Post('admin/channel-settings/preview')
+    @UseGuards(JwtAuthGuard, AdminGuard)
+    @ApiBearerAuth()
+    async preview(@CurrentUser() user: User) {
+        if (!user.telegramUserId) throw new BadRequestException('Telegram akkauntingiz ulanmagan');
+        try {
+            return ok({ sent: await this.channel.sendChannelPreview(user.telegramUserId.toString()) });
+        } catch (e) {
+            throw new BadRequestException(`Yuborilmadi: ${(e as Error).message}`);
+        }
     }
 
     private async chatTitle(chatId: string): Promise<string | null> {

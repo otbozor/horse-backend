@@ -54,9 +54,10 @@ export class AdminController {
         @Query('limit') limit?: number,
         @Query('status') status?: string,
         @Query('q') q?: string,
+        @Query('blocked') blocked?: string,
     ): Promise<ApiResponse<any>> {
         await this.adminService.requireAdmin(user.id);
-        const data = await this.adminService.getUsers(page, limit, status, q);
+        const data = await this.adminService.getUsers(page, limit, status, q, blocked === 'true');
         return {
             success: true,
             data,
