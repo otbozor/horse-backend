@@ -814,6 +814,8 @@ model EventRegistration {
   horseName  String?            @map("horse_name")
   horseBreed String?            @map("horse_breed")
   note       String?
+  /// Ism va ot ommaviy ro'yxatda ko'rinishiga rozilik; aks holda anonim
+  showPublicly Boolean          @default(false) @map("show_publicly")
   status     RegistrationStatus @default(PENDING)
   adminNote  String?            @map("admin_note")
   createdAt  DateTime           @default(now()) @map("created_at")

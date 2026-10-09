@@ -11,6 +11,7 @@ export interface RegistrationInput {
     horseName?: string;
     horseBreed?: string;
     note?: string;
+    showPublicly?: boolean;
 }
 
 export interface ResultsInput {
@@ -66,6 +67,7 @@ export class KopkariService {
             horseName: dto.horseName?.trim().slice(0, 60) || null,
             horseBreed: dto.horseBreed?.trim().slice(0, 60) || null,
             note: dto.note?.trim().slice(0, 300) || null,
+            showPublicly: Boolean(dto.showPublicly),
         };
         const existing = await this.myRegistration(eventId, userId);
         if (existing && (existing.status === RegistrationStatus.PENDING || existing.status === RegistrationStatus.APPROVED)) {
@@ -91,6 +93,28 @@ export class KopkariService {
                 .catch(() => { });
         }
         return reg;
+    }
+
+    /** Ommaviy ro'yxat: faqat tasdiqlanganlar; rozilik bermaganlar anonim, telefon hech qachon qaytarilmaydi */
+    async participants(eventId: string) {
+        const event = await this.prisma.event.findUnique({ where: { id: eventId }, select: { status: true, maxParticipants: true } });
+        if (!event || (event.status !== EventStatus.PUBLISHED && event.status !== EventStatus.COMPLETED)) {
+            throw new NotFoundException('Tadbir topilmadi');
+        }
+        const rows = await this.prisma.eventRegistration.findMany({
+            where: { eventId, status: RegistrationStatus.APPROVED },
+            orderBy: { createdAt: 'asc' },
+            select: { id: true, riderName: true, horseName: true, horseBreed: true, showPublicly: true },
+        });
+        return {
+            total: rows.length,
+            maxParticipants: event.maxParticipants,
+            items: rows.map((r, i) =>
+                r.showPublicly
+                    ? { n: i + 1, anonymous: false, riderName: r.riderName, horseName: r.horseName, horseBreed: r.horseBreed }
+                    : { n: i + 1, anonymous: true },
+            ),
+        };
     }
 
     async cancel(eventId: string, userId: string) {

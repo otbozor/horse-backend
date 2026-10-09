@@ -23,6 +23,9 @@ class RegisterDto {
 
     @IsOptional() @IsString() @MaxLength(300)
     note?: string;
+
+    @IsOptional() @IsBoolean()
+    showPublicly?: boolean;
 }
 
 class DecisionDto {
@@ -83,6 +86,12 @@ export class KopkariController {
     @ApiOperation({ summary: "Ko'pkariga ishtirokchi sifatida ariza" })
     async register(@Param('id') id: string, @Body() dto: RegisterDto, @CurrentUser() user: User) {
         return ok(await this.kopkari.register(id, user.id, dto));
+    }
+
+    @Get('events/:id/participants')
+    @ApiOperation({ summary: "Tasdiqlangan ishtirokchilar (ommaviy, telefonlarsiz)" })
+    async participants(@Param('id') id: string) {
+        return ok(await this.kopkari.participants(id));
     }
 
     @Delete('events/:id/register')
