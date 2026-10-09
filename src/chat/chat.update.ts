@@ -1,6 +1,7 @@
 import { Action, Ctx, Next, On, Update } from 'nestjs-telegraf';
 import { Context } from 'telegraf';
 import { ChatService } from './chat.service';
+import { FALLBACK_TEXT, mainMenuKeyboard } from '../telegram/bot-menu';
 
 @Update()
 export class ChatUpdate {
@@ -10,7 +11,15 @@ export class ChatUpdate {
     @On('message')
     async onMessage(@Ctx() ctx: Context, @Next() next: () => Promise<void>) {
         const handled = await this.chat.relay(ctx).catch(() => false);
-        if (!handled) await next();
+        if (handled) return;
+        // Hech kimga tegishli bo'lmagan oddiy matn — jim qolmasdan menyu ko'rsatamiz
+        const msg = ctx.message;
+        if (ctx.chat?.type === 'private' && msg && 'text' in msg && !msg.text.startsWith('/')) {
+            const miniAppUrl = (process.env.MINI_APP_URL || '').replace(/\/$/, '');
+            await ctx.reply(FALLBACK_TEXT, { reply_markup: mainMenuKeyboard(miniAppUrl) }).catch(() => { });
+            return;
+        }
+        await next();
     }
 
     @Action('chat:stop')

@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
-import { Update, Start, Ctx, Help, On, Command, Action } from 'nestjs-telegraf';
-import { Context } from 'telegraf';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
+import { Update, Start, Ctx, Help, On, Command, Action, InjectBot } from 'nestjs-telegraf';
+import { Context, Telegraf } from 'telegraf';
+import { BOT_COMMANDS, HELP_TEXT, WELCOME_TEXT, mainMenuKeyboard } from './bot-menu';
 import { AuthService } from '../auth/auth.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramChannelService } from './telegram-channel.service';
@@ -9,13 +10,62 @@ import { ChatService } from '../chat/chat.service';
 
 @Injectable()
 @Update()
-export class TelegramBotService {
+export class TelegramBotService implements OnApplicationBootstrap {
+    private readonly logger = new Logger(TelegramBotService.name);
+
     constructor(
         private readonly authService: AuthService,
         private readonly prisma: PrismaService,
         private readonly channel: TelegramChannelService,
         private readonly chat: ChatService,
+        @InjectBot() private readonly bot: Telegraf,
     ) { }
+
+    private get miniAppUrl() {
+        return (process.env.MINI_APP_URL || '').replace(/\/$/, '');
+    }
+
+    /** Telegram'dagi "Menu" tugmasidagi buyruqlar ro'yxati */
+    async onApplicationBootstrap() {
+        try {
+            await this.bot.telegram.setMyCommands(BOT_COMMANDS.uz);
+            await this.bot.telegram.setMyCommands(BOT_COMMANDS.ru, { language_code: 'ru' });
+        } catch (e) {
+            this.logger.warn(`setMyCommands failed: ${(e as Error).message}`);
+        }
+    }
+
+    /** Bitta Mini App bo'limini ochadigan qisqa javob */
+    private async replyOpen(ctx: Context, text: string, button: string, path: string) {
+        if (!this.miniAppUrl) {
+            await ctx.reply(text, { parse_mode: 'HTML' });
+            return;
+        }
+        await ctx.reply(text, {
+            parse_mode: 'HTML',
+            reply_markup: { inline_keyboard: [[{ text: button, web_app: { url: `${this.miniAppUrl}${path}` } }]] },
+        });
+    }
+
+    @Command('elon')
+    async onPost(@Ctx() ctx: Context) {
+        await this.replyOpen(ctx, "➕ <b>E'lon joylash</b>\n\nOt, anjom yoki xizmat — turini tanlang, forma 2 daqiqada to'ldiriladi.", "➕ E'lon joylash", '/create');
+    }
+
+    @Command('kopkari')
+    async onKopkari(@Ctx() ctx: Context) {
+        await this.replyOpen(ctx, "🏇 <b>Ko'pkari taqvimi</b>\n\nYaqinlashayotgan ko'pkarilar, ro'yxatdan o'tish va eslatmalar.", "🏇 Ko'pkarilarni ko'rish", '/kopkari');
+    }
+
+    @Command('saqlangan')
+    async onFavorites(@Ctx() ctx: Context) {
+        await this.replyOpen(ctx, "❤️ <b>Saqlangan e'lonlar</b>", '❤️ Saqlanganlarni ochish', '/favorites');
+    }
+
+    @Command('sozlamalar')
+    async onSettings(@Ctx() ctx: Context) {
+        await this.replyOpen(ctx, "🔔 <b>Bildirishnoma sozlamalari</b>\n\nQaysi xabarlar kelishini o'zingiz tanlang.", '⚙️ Sozlamalarni ochish', '/notifications/settings');
+    }
 
     /** Sotuvchi narx taklifini bot xabaridagi tugma orqali qabul qiladi / rad etadi */
     @Action(/^offer:(a|r):(.+)$/)
@@ -48,21 +98,7 @@ export class TelegramBotService {
         }
 
         if (!startPayload) {
-            const miniAppUrl = process.env.MINI_APP_URL;
-            await ctx.reply(
-                '🐴 *Otbozor platformasiga xush kelibsiz!*\n\n' +
-                (miniAppUrl
-                    ? 'Ot sotish va sotib olish endi Telegram ichida — quyidagi tugmani bosing 👇'
-                    : 'Login qilish uchun veb saytdan "Telegram orqali kirish" tugmasini bosing.'),
-                {
-                    parse_mode: 'Markdown',
-                    ...(miniAppUrl && {
-                        reply_markup: {
-                            inline_keyboard: [[{ text: '🐴 Otbozorni ochish', web_app: { url: miniAppUrl } }]],
-                        },
-                    }),
-                }
-            );
+            await ctx.reply(WELCOME_TEXT, { parse_mode: 'HTML', reply_markup: mainMenuKeyboard(this.miniAppUrl) });
             return;
         }
 
@@ -191,10 +227,8 @@ export class TelegramBotService {
                 if (pendingSession) {
                     await this.prisma.telegramAuthSession.delete({ where: { id: pendingId } });
                 }
-                await ctx.reply(
-                    '❌ Login jarayoni topilmadi yoki muddati o\'tdi.\n\n' +
-                    'Iltimos, veb saytdan qaytadan "Telegram orqali kirish" tugmasini bosing.'
-                );
+                // Login jarayoni emas — Mini App yoki bot tugmasidan raqam ulash
+                await this.linkPhone(ctx, contact);
                 return;
             }
 
@@ -265,9 +299,28 @@ export class TelegramBotService {
         }
     }
 
+    /** Mini App'dan (requestContact) kelgan raqamni profilga ulash */
+    private async linkPhone(ctx: Context, contact: { phone_number: string; user_id?: number }) {
+        const telegramUserId = ctx.from!.id;
+        if (contact.user_id !== telegramUserId) {
+            await ctx.reply("❌ Iltimos, o'zingizning telefon raqamingizni yuboring.", { reply_markup: { remove_keyboard: true } });
+            return;
+        }
+        const phone = contact.phone_number.startsWith('+') ? contact.phone_number : `+${contact.phone_number}`;
+        const res = await this.prisma.user.updateMany({ where: { telegramUserId: BigInt(telegramUserId) }, data: { phone } });
+        if (!res.count) {
+            await ctx.reply("Avval Otbozor ilovasini oching — so'ng raqamingizni ulashingiz mumkin.", { reply_markup: mainMenuKeyboard(this.miniAppUrl) });
+            return;
+        }
+        await ctx.reply(`✅ Telefon raqamingiz ulandi: ${phone}\n\nEndi e'lon joylaganda raqam avtomatik qo'yiladi.`, { reply_markup: { remove_keyboard: true } });
+    }
+
+    /** Faqat adminlar uchun: o'z Telegram ID sini bilish */
     @Command('myid')
     async onMyId(@Ctx() ctx: Context) {
         const userId = ctx.from?.id;
+        const admins = `${process.env.ADMIN_TELEGRAM_IDS || ''},${process.env.TELEGRAM_ADMIN_CHAT_IDS || ''}`.split(',').map((x) => x.trim());
+        if (!userId || !admins.includes(String(userId))) return;
         await ctx.reply(
             `🆔 Sizning Telegram ID:\n\n<code>${userId}</code>\n\n` +
             `Bu ID ni <b>TELEGRAM_ADMIN_CHAT_ID</b> ga kiriting.`,
@@ -277,20 +330,11 @@ export class TelegramBotService {
 
     @Help()
     async onHelp(@Ctx() ctx: Context) {
-        await ctx.reply(
-            '🆘 *Yordam*\n\n' +
-            '🐴 *Otbozor* - O\'zbekistondagi eng katta ot savdo platformasi\n\n' +
-            '*Yangi login usuli:*\n' +
-            '1. Veb saytga o\'ting: otbozor.uz\n' +
-            '2. "Telegram orqali kirish" tugmasini bosing\n' +
-            '3. Bot sizga login havolasini yuboradi\n' +
-            '4. "🚀 Saytga kirish" tugmasini bosing\n' +
-            '5. Avtomatik login bo\'lasiz!\n\n' +
-            '*Yangi foydalanuvchilar uchun:*\n' +
-            '- Telefon raqamingizni tasdiqlashingiz kerak\n' +
-            '- Keyin avtomatik login bo\'lasiz\n\n' +
-            '*Aloqa:* @otbozor_support',
-            { parse_mode: 'Markdown' }
-        );
+        await ctx.reply(HELP_TEXT, { parse_mode: 'HTML', reply_markup: mainMenuKeyboard(this.miniAppUrl) });
+    }
+
+    @Command('yordam')
+    async onYordam(@Ctx() ctx: Context) {
+        await this.onHelp(ctx);
     }
 }

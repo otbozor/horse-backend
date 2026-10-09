@@ -8,6 +8,13 @@ import slugify from 'slugify';
 import { v4 as uuidv4 } from 'uuid';
 import { CreateListingDto, UpdateListingDto, ListingsFilterDto } from './dto/listing.dto';
 
+/** Ro'yxat kartalaridagi "Auksion" belgisi uchun faol savdo */
+const ACTIVE_AUCTION_BADGE = {
+    where: { status: 'ACTIVE' as const },
+    select: { endsAt: true, currentPrice: true, startPrice: true },
+    take: 1,
+};
+
 @Injectable()
 export class ListingsService {
     constructor(
@@ -99,6 +106,7 @@ export class ListingsService {
                         orderBy: { sortOrder: 'asc' },
                         take: 1,
                     },
+                    auctions: ACTIVE_AUCTION_BADGE,
                 },
             }),
             this.prisma.horseListing.count({ where }),
@@ -136,6 +144,7 @@ export class ListingsService {
                 media: {
                     orderBy: { sortOrder: 'asc' },
                 },
+                auctions: ACTIVE_AUCTION_BADGE,
             },
         });
 
@@ -206,6 +215,7 @@ export class ListingsService {
                     orderBy: { sortOrder: 'asc' },
                     take: 1,
                 },
+                auctions: ACTIVE_AUCTION_BADGE,
             },
         });
     }
@@ -656,6 +666,7 @@ export class ListingsService {
                             orderBy: { sortOrder: 'asc' },
                             take: 1,
                         },
+                        auctions: ACTIVE_AUCTION_BADGE,
                     },
                 },
             },
@@ -688,6 +699,7 @@ export class ListingsService {
                     orderBy: { sortOrder: 'asc' },
                     take: 1,
                 },
+                auctions: ACTIVE_AUCTION_BADGE,
             },
         });
     }
