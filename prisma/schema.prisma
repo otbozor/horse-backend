@@ -490,6 +490,7 @@ enum PaymentPackage {
   OSON_START
   TEZKOR_SAVDO
   TURBO_SAVDO
+  BUMP
 }
 
 model CacheEntry {
@@ -731,6 +732,7 @@ enum HorseRequestStatus {
 enum PaymentMethod {
   CLICK
   STARS
+  MANUAL
 }
 
 // ---------- O'sish: ommaviy xabar va bannerlar ----------

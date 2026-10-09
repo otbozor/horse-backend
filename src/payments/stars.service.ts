@@ -5,7 +5,7 @@ import { PaymentMethod, PaymentPackage, PaymentStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PaymentService } from './payment.service';
 
-export type StarsPurpose = 'boost' | 'credits' | 'listing-bundle' | 'product' | 'reactivation';
+export type StarsPurpose = 'boost' | 'bump' | 'credits' | 'listing-bundle' | 'product' | 'reactivation';
 
 export interface StarsInvoiceInput {
     purpose: StarsPurpose;
@@ -57,6 +57,11 @@ export class StarsService {
                 if (!input.listingId || !input.packageType) throw new BadRequestException('listingId va packageType kerak');
                 created = await this.payments.createBoostPackageInvoice(userId, input.packageType, input.listingId);
                 title = `Reklama: ${{ OSON_START: 'Oson start', TEZKOR_SAVDO: 'Tezkor savdo', TURBO_SAVDO: 'Turbo savdo' }[input.packageType]}`;
+                break;
+            case 'bump':
+                if (!input.listingId) throw new BadRequestException('listingId kerak');
+                created = await this.payments.createBumpInvoice(userId, input.listingId);
+                title = "E'lonni yangilash";
                 break;
             case 'credits':
                 if (!input.bundleSize) throw new BadRequestException('bundleSize kerak');
