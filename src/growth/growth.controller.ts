@@ -7,6 +7,7 @@ import { AdminGuard } from '../common/guards/admin.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { Audience, GrowthService } from './growth.service';
+import { DigestService } from './digest.service';
 
 class BroadcastDto {
     @IsString() @MaxLength(4000)
@@ -76,6 +77,7 @@ export class GrowthController {
     constructor(
         private readonly growth: GrowthService,
         private readonly prisma: PrismaService,
+        private readonly digest: DigestService,
     ) { }
 
     // ---------- Bannerlar (ommaviy) ----------
@@ -89,6 +91,30 @@ export class GrowthController {
     async bannerClick(@Param('id') id: string) {
         this.growth.bannerClick(id).catch(() => { });
         return ok(null);
+    }
+
+    // ---------- Bildirishnomalar ----------
+
+    @Get('my/notifications')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    async myNotifications(@CurrentUser() user: User) {
+        const u = await this.prisma.user.findUnique({ where: { id: user.id }, select: { digestEnabled: true } });
+        return ok({ digestEnabled: u?.digestEnabled ?? true });
+    }
+
+    @Put('my/notifications')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    async setNotifications(@CurrentUser() user: User, @Body() body: { digestEnabled?: boolean }) {
+        return ok(await this.digest.setEnabled(user.id, body?.digestEnabled !== false));
+    }
+
+    @Post('admin/digest/test')
+    @UseGuards(JwtAuthGuard, AdminGuard)
+    @ApiBearerAuth()
+    async digestTest(@CurrentUser() user: User) {
+        return ok(await this.digest.sendTest(user.id));
     }
 
     // ---------- Referal ----------
