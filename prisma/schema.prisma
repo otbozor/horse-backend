@@ -162,6 +162,7 @@ model HorseListing {
   priceOffers    PriceOffer[]
   priceHistory   PriceHistory[]
   requestResponses RequestResponse[]
+  contacts       ListingContact[]
 
   @@index([userId])
   @@index([regionId])
@@ -727,6 +728,25 @@ enum HorseRequestStatus {
   ACTIVE
   CLOSED
   REMOVED
+}
+
+/// E'londagi bog'lanish tugmalari bosilishi (sotuvchi statistikasi uchun)
+model ListingContact {
+  id        String       @id @default(uuid())
+  listingId String       @map("listing_id")
+  userId    String?      @map("user_id")
+  type      ContactType
+  createdAt DateTime     @default(now()) @map("created_at")
+  listing   HorseListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId, createdAt])
+  @@map("listing_contacts")
+}
+
+enum ContactType {
+  PHONE
+  TELEGRAM
+  CHAT
 }
 
 enum PaymentMethod {
