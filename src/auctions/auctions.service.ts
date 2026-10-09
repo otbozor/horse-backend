@@ -167,7 +167,7 @@ export class AuctionsService {
         });
         if (forChannel) {
             this.channel
-                .postAuctionToChannel(forChannel, { startPrice, minStep, currency: listing.priceCurrency, endsAt: a.endsAt })
+                .postAuctionToChannel(forChannel, { id: a.id, startPrice, minStep, currency: listing.priceCurrency, endsAt: a.endsAt })
                 .catch(() => { });
         }
         return this.serialize(a, sellerId);
@@ -227,6 +227,7 @@ export class AuctionsService {
         if (a.status !== AuctionStatus.ACTIVE) throw new BadRequestException('Auksion faol emas');
         const why = reason?.trim().slice(0, 500) || a.cancelRequestReason || null;
         await this.prisma.auction.update({ where: { id: auctionId }, data: { status: AuctionStatus.CANCELLED, cancelReason: why } });
+        this.channel.refreshAuctionPost(auctionId).catch(() => { });
         const title = esc(a.listing.title);
         void this.notify(a.seller.telegramUserId, `🛑 <b>Auksion bekor qilindi</b>\n🐴 ${title}${why ? `\n📝 ${esc(why)}` : ''}`, a.listing.id);
         if (a.bids.length) {
@@ -337,6 +338,7 @@ export class AuctionsService {
         const price = formatMoney(amount, result.currency);
         void this.notify(prev?.telegramUserId, `⚠️ <b>Taklifingiz oshib ketildi</b>\n🐴 ${esc(result.listing.title)}\nYangi narx: <b>${price}</b>`, result.listing.id);
         void this.notify(seller?.telegramUserId, `🔨 <b>Auksionda yangi taklif</b>\n🐴 ${esc(result.listing.title)}\nJoriy narx: <b>${price}</b>`, result.listing.id);
+        this.channel.refreshAuctionPost(auctionId).catch(() => { });
         const me = await this.prisma.user.findUnique({ where: { id: userId }, select: { telegramUserId: true } });
         void this.notify(
             me?.telegramUserId,
@@ -389,6 +391,7 @@ export class AuctionsService {
         for (const a of due) {
             const claimed = await this.prisma.auction.updateMany({ where: { id: a.id, status: AuctionStatus.ACTIVE }, data: { status: AuctionStatus.ENDED } });
             if (claimed.count !== 1) continue;
+            this.channel.refreshAuctionPost(a.id).catch(() => { });
             const title = esc(a.listing.title);
             if (!a.leader || !a.currentPrice) {
                 void this.notify(a.seller.telegramUserId, `⏱ <b>Auksion yakunlandi</b>\n🐴 ${title}\nAfsuski, taklif tushmadi.`, a.listing.id);

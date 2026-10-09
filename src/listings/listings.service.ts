@@ -596,6 +596,8 @@ export class ListingsService {
                 ...(saleSource && { saleSource }),
             },
         });
+        // Kanaldagi postni belgilash: sotildi (tabrik bilan) yoki faol emas
+        this.telegramNotify.refreshListingPost(id, saleSource ? 'sold' : 'closed', saleSource).catch(() => { });
     }
 
     async deleteListing(userId: string, id: string): Promise<void> {
@@ -615,6 +617,7 @@ export class ListingsService {
             throw new ForbiddenException('Faqat nofaol (arxivlangan) e\'lonni o\'chirish mumkin');
         }
 
+        await this.telegramNotify.refreshListingPost(id, 'closed').catch(() => { });
         await this.prisma.horseListing.delete({ where: { id } });
     }
 

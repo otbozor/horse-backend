@@ -31,6 +31,8 @@ model User {
   activeChatThreadId   String?           @map("active_chat_thread_id")
   /// Bildirishnoma turlari bo'yicha bot xabarlari: { LISTINGS: false, ... }
   notificationPrefs    Json              @default("{}") @map("notification_prefs")
+  /// Foydalanuvchi botni bloklagan vaqt (qayta yoqsa null)
+  botBlockedAt         DateTime?         @map("bot_blocked_at")
   auditLogs            AuditLog[]
   comments             Comment[]
   favorites            Favorite[]
@@ -177,6 +179,7 @@ model HorseListing {
   contacts       ListingContact[]
   chatThreads    ChatThread[]
   auctions       Auction[]
+  channelPosts   ChannelPost[]
 
   @@index([userId])
   @@index([regionId])
@@ -876,6 +879,28 @@ enum NotificationCategory {
   AUCTIONS
   KOPKARI
   SYSTEM
+}
+
+/// Kanalga joylangan postlar — keyinchalik tahrirlash uchun (narx, sotildi, auksion holati)
+model ChannelPost {
+  id        String          @id @default(uuid())
+  kind      ChannelPostKind
+  listingId String          @map("listing_id")
+  auctionId String?         @map("auction_id")
+  chatId    String          @map("chat_id")
+  messageId Int             @map("message_id")
+  isPhoto   Boolean         @default(true) @map("is_photo")
+  createdAt DateTime        @default(now()) @map("created_at")
+  listing   HorseListing    @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@index([auctionId])
+  @@map("channel_posts")
+}
+
+enum ChannelPostKind {
+  LISTING
+  AUCTION
 }
 
 enum ContactType {

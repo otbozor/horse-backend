@@ -352,6 +352,9 @@ export class AdminService {
             ).catch(() => { });
         }
 
+        // Qayta tasdiqlanganda kanaldagi eski post yana "faol" ko'rinishga qaytadi
+        if (!isFirstTimeApproval) this.telegramNotify.refreshListingPost(listingId, 'active').catch(() => { });
+
         // Telegram kanalga e'lon yuborish - FAQAT birinchi marta approve qilinganda
         if (isFirstTimeApproval) {
             const listingForChannel = await this.prisma.horseListing.findUnique({
@@ -420,6 +423,7 @@ export class AdminService {
         });
 
         await this.createAuditLog(adminUserId, 'listing.archive', 'HorseListing', listingId, { saleSource });
+        this.telegramNotify.refreshListingPost(listingId, saleSource ? 'sold' : 'closed', saleSource).catch(() => { });
 
         return { archived: true, saleSource };
     }
@@ -454,11 +458,12 @@ export class AdminService {
     }
 
     // Users management
-    async getUsers(page = 1, limit = 20, status?: string, q?: string) {
+    async getUsers(page = 1, limit = 20, status?: string, q?: string, blocked?: boolean) {
         page = toPage(page, 1, 100000);
         limit = toPage(limit, 20);
         const where: Prisma.UserWhereInput = {};
         if (status) where.status = status as any;
+        if (blocked) where.botBlockedAt = { not: null };
         const term = q?.trim().replace(/^@/, '');
         if (term) {
             where.OR = [
@@ -494,6 +499,7 @@ export class AdminService {
                     createdAt: true,
                     updatedAt: true,
                     lastLoginAt: true,
+                    botBlockedAt: true,
                     _count: { select: { listings: true } },
                 },
             }),
@@ -506,9 +512,11 @@ export class AdminService {
             telegramUserId: user.telegramUserId ? user.telegramUserId.toString() : null,
         }));
 
+        const blockedTotal = await this.prisma.user.count({ where: { botBlockedAt: { not: null } } });
         return {
             data: serializedUsers,
             pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+            blockedTotal,
         };
     }
 

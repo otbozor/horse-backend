@@ -75,75 +75,267 @@ export class TelegramChannelService {
         return cfg;
     }
 
+    // =================== Kanal postlari (joylash va keyinchalik tahrirlash) ===================
+
+    private money(n: number, currency: string) {
+        return currency === 'USD' ? `$${n.toLocaleString('en-US')}` : `${n.toLocaleString('uz-UZ')} so'm`;
+    }
+
+    private botAppLink(listingId: string) {
+        const bot = (this.configService.get<string>('TELEGRAM_BOT_USERNAME') || 'otbozor_bot').replace(/^@/, '');
+        return `https://t.me/${bot}/app?startapp=l_${listingId}`;
+    }
+
+    private footer(channelUrl: string) {
+        return (
+            `\n\nOtbozor.uz — ot savdosi uchun maxsus yaratilgan platforma.\n\n` +
+            `<b><a href="${channelUrl}">Telegram kanal</a></b> | ` +
+            `<b><a href="https://t.me/otbozor_rasmiy_guruh">Telegram guruh</a></b> | ` +
+            `<b><a href="https://instagram.com/otbozor.uz">Instagram</a></b>`
+        );
+    }
+
+    /** E'lon posti matni: faol / sotildi / yopildi holatlari */
+    private listingCaption(
+        l: ListingForChannel & { previousPrice?: { toString(): string } | number | null },
+        channelUrl: string,
+        state: 'active' | 'sold' | 'closed' = 'active',
+        soldViaOtbozor = false,
+    ) {
+        const currency = l.priceCurrency || 'UZS';
+        const priceNum = l.priceAmount ? Number(l.priceAmount.toString()) : 0;
+        const prev = l.previousPrice ? Number(l.previousPrice.toString()) : 0;
+        const price = priceNum ? this.money(priceNum, currency) : "Narx ko'rsatilmagan";
+        const region = l.region?.nameUz || '';
+        const district = l.district?.nameUz || '';
+        const breed = l.breed?.name || '';
+        const age = l.ageYears ? `${l.ageYears} yosh` : '';
+
+        let c = '';
+        if (state === 'sold') c += `✅ <b>SOTILDI</b>${soldViaOtbozor ? ' — Otbozor orqali' : ''}\n\n`;
+        if (state === 'closed') c += `⛔️ <b>E'lon faol emas</b>\n\n`;
+        c += state === 'active' ? `<b>${this.escapeHtml(l.title)}</b>\n\n` : `<s>${this.escapeHtml(l.title)}</s>\n\n`;
+        c += prev > priceNum && state === 'active'
+            ? `<b>💰 Narxi:</b> <s>${this.money(prev, currency)}</s> ➜ <b>${price}</b> 🔻\n`
+            : `<b>💰 Narxi:</b> ${price}\n`;
+        if (region) c += `<b>📍 Joylashuvi:</b> ${this.escapeHtml(region)}${district ? ', ' + this.escapeHtml(district) : ''}\n`;
+        if (breed) c += `<b>${this.getBreedEmoji(breed)} Zoti:</b> ${this.escapeHtml(breed)}\n`;
+        if (age) c += `<b>${this.getAgeEmoji(l.ageYears)} Yoshi:</b> ${age}\n`;
+        if (state === 'sold') c += `\n🤝 <b>Olganga ham, sotganga ham baraka bersin!</b>`;
+        return c + this.footer(channelUrl);
+    }
+
+    private listingKeyboard(listingId: string, slug: string, state: 'active' | 'sold' | 'closed') {
+        const link = `${this.frontendUrl}/ot/${listingId}-${slug}`;
+        if (state !== 'active') {
+            return { inline_keyboard: [[{ text: "Barcha e'lonlar", url: `${this.frontendUrl}/bozor` }, { text: "E'lon joylash", url: `${this.frontendUrl}/elon/yaratish` }]] };
+        }
+        return {
+            inline_keyboard: [
+                [{ text: "To'liq ma'lumot", url: link }, { text: "E'lon joylash", url: `${this.frontendUrl}/elon/yaratish` }],
+                [{ text: "Barcha e'lonlar", url: `${this.frontendUrl}/bozor` }, { text: 'Admin', url: `https://t.me/${this.adminUsername.replace('@', '')}` }],
+            ],
+        };
+    }
+
+    /** Auksion posti matni: boshlangan / takliflar / yakunlangan / bekor qilingan */
+    private auctionCaption(
+        l: { title: string; ageYears: number | null; region?: { nameUz: string } | null; breed?: { name: string } | null },
+        a: { status: string; currency: string; startPrice: number; minStep: number; currentPrice: number | null; bidCount: number; endsAt: Date; cancelReason?: string | null },
+    ) {
+        const lt = new Date(a.endsAt.getTime() + 5 * 3600000);
+        const ends = `${String(lt.getUTCDate()).padStart(2, '0')}.${String(lt.getUTCMonth() + 1).padStart(2, '0')} soat ${String(lt.getUTCHours()).padStart(2, '0')}:${String(lt.getUTCMinutes()).padStart(2, '0')}`;
+        let c = '';
+        if (a.status === 'ENDED') c += a.currentPrice ? `🏁 <b>AUKSION YAKUNLANDI!</b>\n\n` : `⏱ <b>AUKSION YAKUNLANDI</b> — taklif tushmadi\n\n`;
+        else if (a.status === 'CANCELLED') c += `🛑 <b>AUKSION BEKOR QILINDI</b>\n\n`;
+        else c += `🔨 <b>KIM OSHDI SAVDOSI!</b>\n\n`;
+        c += `<b>${this.escapeHtml(l.title)}</b>\n`;
+        if (l.breed) c += `🐴 Zoti: ${this.escapeHtml(l.breed.name)}\n`;
+        if (l.ageYears != null) c += `📅 Yoshi: ${l.ageYears} yosh\n`;
+        if (l.region) c += `📍 ${this.escapeHtml(l.region.nameUz)}\n`;
+        c += '\n';
+        if (a.status === 'ENDED' && a.currentPrice) {
+            c += `💰 Yakuniy narx: <b>${this.money(a.currentPrice, a.currency)}</b>\n`;
+            c += `👥 ${a.bidCount} ta taklif · boshlang'ich ${this.money(a.startPrice, a.currency)}\n\n`;
+            c += `🤝 <b>G'olibga ham, sotuvchiga ham baraka bersin!</b>`;
+        } else if (a.status === 'CANCELLED') {
+            c += `💰 Boshlang'ich narx: ${this.money(a.startPrice, a.currency)}\n`;
+            if (a.cancelReason) c += `📝 ${this.escapeHtml(a.cancelReason)}\n`;
+        } else if (a.currentPrice) {
+            c += `💰 Joriy narx: <b>${this.money(a.currentPrice, a.currency)}</b> 🔥\n`;
+            c += `👥 ${a.bidCount} ta taklif · boshlang'ich ${this.money(a.startPrice, a.currency)}\n`;
+            c += `➕ Keyingi taklif: kamida ${this.money(a.currentPrice + a.minStep, a.currency)}\n`;
+            c += `⏳ Tugaydi: <b>${ends}</b>\n\nEng yuqori narxni taklif qilgan xaridor yutadi!`;
+        } else {
+            c += `💰 Boshlang'ich narx: <b>${this.money(a.startPrice, a.currency)}</b>\n`;
+            c += `➕ Qadam: ${this.money(a.minStep, a.currency)}\n`;
+            c += `⏳ Tugaydi: <b>${ends}</b>\n\nEng yuqori narxni taklif qilgan xaridor yutadi!`;
+        }
+        return c;
+    }
+
+    private auctionKeyboard(listingId: string, active: boolean) {
+        return active
+            ? { inline_keyboard: [[{ text: '🔨 Auksionda qatnashish', url: this.botAppLink(listingId) }]] }
+            : { inline_keyboard: [[{ text: "🐴 E'lonni ko'rish", url: this.botAppLink(listingId) }]] };
+    }
+
+    private async sendPost(chatId: string, caption: string, reply_markup: any, photo?: string | null) {
+        return photo
+            ? this.bot.telegram.sendPhoto(chatId, photo, { caption, parse_mode: 'HTML', reply_markup })
+            : this.bot.telegram.sendMessage(chatId, caption, { parse_mode: 'HTML', reply_markup, link_preview_options: { is_disabled: true } });
+    }
+
+    private async editPost(post: { chatId: string; messageId: number; isPhoto: boolean }, caption: string, reply_markup: any) {
+        try {
+            if (post.isPhoto) await this.bot.telegram.editMessageCaption(post.chatId, post.messageId, undefined, caption, { parse_mode: 'HTML', reply_markup });
+            else await this.bot.telegram.editMessageText(post.chatId, post.messageId, undefined, caption, { parse_mode: 'HTML', reply_markup, link_preview_options: { is_disabled: true } });
+        } catch (e) {
+            if (!/not modified/i.test((e as Error).message)) this.logger.warn(`Channel post edit failed: ${(e as Error).message}`);
+        }
+    }
+
+    private readonly listingForChannelInclude = {
+        region: { select: { nameUz: true } },
+        district: { select: { nameUz: true } },
+        breed: { select: { name: true } },
+        user: { select: { phone: true } },
+        media: { where: { type: 'IMAGE' as const }, orderBy: { sortOrder: 'asc' as const } },
+    };
+
     async postListingToChannel(listing: ListingForChannel): Promise<void> {
         const channel = await this.activeChannel(`listing ${listing.id}`);
         if (!channel) return;
-
         try {
-            const priceNum = listing.priceAmount ? Number(listing.priceAmount.toString()) : null;
-            const currency = listing.priceCurrency || 'UZS';
-            const price = priceNum
-                ? currency === 'USD'
-                    ? `$${priceNum.toLocaleString('en-US')}`
-                    : `${priceNum.toLocaleString('uz-UZ')} so'm`
-                : "Narx ko'rsatilmagan";
-
-            const region = listing.region?.nameUz || '';
-            const district = listing.district?.nameUz || '';
-            const breed = listing.breed?.name || '';
-            const age = listing.ageYears ? `${listing.ageYears} yosh` : '';
-            const link = `${this.frontendUrl}/ot/${listing.id}-${listing.slug}`;
-
-            const breedEmoji = this.getBreedEmoji(breed);
-            const ageEmoji = this.getAgeEmoji(listing.ageYears);
-
-            let caption = `<b>${this.escapeHtml(listing.title)}</b>\n\n`;
-
-            if (price) caption += `<b>💰 Narxi:</b> ${price}\n`;
-            if (region) caption += `<b>📍 Joylashuvi:</b> ${this.escapeHtml(region)}${district ? ', ' + this.escapeHtml(district) : ''}\n`;
-            if (breed) caption += `<b>${breedEmoji} Zoti:</b> ${this.escapeHtml(breed)}\n`;
-            if (age) caption += `<b>${ageEmoji} Yoshi:</b> ${age}\n`;
-
-            caption += `\nOtbozor.uz — ot savdosi uchun maxsus yaratilgan platforma.\n\n`;
-            caption += `<b><a href="${channel.url}">Telegram kanal</a></b> | `;
-            caption += `<b><a href="https://t.me/otbozor_rasmiy_guruh">Telegram guruh</a></b> | `;
-            caption += `<b><a href="https://instagram.com/otbozor.uz">Instagram</a></b>`;
-
-            const images = listing.media?.filter(m => m.url) || [];
-
-            const keyboard = {
-                inline_keyboard: [
-                    [
-                        { text: "To'liq ma'lumot", url: link },
-                        { text: "E'lon joylash", url: `${this.frontendUrl}/elon/yaratish` }
-                    ],
-                    [
-                        { text: "Barcha e'lonlar", url: `${this.frontendUrl}/bozor` },
-                        { text: "Admin", url: `https://t.me/${this.adminUsername.replace('@', '')}` }
-                    ],
-                ],
-            };
-
-            if (images.length === 0) {
-                await this.bot.telegram.sendMessage(channel.chatId, caption, {
-                    parse_mode: 'HTML',
-                    link_preview_options: { is_disabled: false },
-                    reply_markup: keyboard,
-                });
-            } else {
-                // Faqat birinchi rasmni yuborish (buttonlar bilan)
-                await this.bot.telegram.sendPhoto(channel.chatId, images[0].url, {
-                    caption,
-                    parse_mode: 'HTML',
-                    reply_markup: keyboard,
-                });
-            }
-
+            const photo = listing.media?.find((m) => m.url)?.url ?? null;
+            const msg = await this.sendPost(channel.chatId, this.listingCaption(listing, channel.url), this.listingKeyboard(listing.id, listing.slug, 'active'), photo);
+            await this.prisma.channelPost.create({
+                data: { kind: 'LISTING', listingId: listing.id, chatId: channel.chatId, messageId: msg.message_id, isPhoto: Boolean(photo) },
+            });
             this.logger.log(`✅ Listing posted to Telegram channel: ${listing.id}`);
         } catch (error) {
             this.logger.error(`❌ Failed to post listing to Telegram channel: ${error.message}`);
         }
     }
+
+    /**
+     * Kanaldagi e'lon postini yangilash: narx o'zgarishi, sotildi yoki yopildi.
+     * Sotilganda postga tabrik javobi ham yuboriladi.
+     */
+    async refreshListingPost(listingId: string, state: 'active' | 'sold' | 'closed', saleSource?: string | null): Promise<void> {
+        const posts = await this.prisma.channelPost.findMany({ where: { listingId, kind: 'LISTING' } });
+        if (!posts.length) return;
+        const l = await this.prisma.horseListing.findUnique({ where: { id: listingId }, include: this.listingForChannelInclude });
+        if (!l) return;
+        const cfg = await this.getChannelConfig();
+        const caption = this.listingCaption(l, cfg.url, state, saleSource === 'OTBOZOR');
+        for (const post of posts) {
+            await this.editPost(post, caption, this.listingKeyboard(l.id, l.slug, state));
+            if (state === 'sold') {
+                await this.bot.telegram
+                    .sendMessage(
+                        post.chatId,
+                        `🎉 <b>Ot sotildi!</b>\n\n🐴 ${this.escapeHtml(l.title)}\n\n🤝 Olganga ham, sotganga ham baraka bersin!` +
+                        (saleSource === 'OTBOZOR' ? `\n\n✅ Otbozor orqali sotildi. Otingizni siz ham shu yerda tez soting!` : ''),
+                        { parse_mode: 'HTML', reply_parameters: { message_id: post.messageId, allow_sending_without_reply: true } },
+                    )
+                    .catch((e) => this.logger.warn(`Sold reply failed: ${e.message}`));
+            }
+        }
+    }
+
+    /** Kanalga: "Kim oshdi savdosi boshlandi" — Mini App'dagi auksionga tugma bilan */
+    async postAuctionToChannel(
+        listing: { id: string; title: string; ageYears: number | null; region?: { nameUz: string } | null; breed?: { name: string } | null; media?: { url: string }[] },
+        auction: { id: string; startPrice: number; minStep: number; currency: string; endsAt: Date },
+    ): Promise<void> {
+        const channel = await this.activeChannel(`auction ${listing.id}`);
+        if (!channel) return;
+        try {
+            const photo = listing.media?.[0]?.url ?? null;
+            const caption = this.auctionCaption(listing, { ...auction, status: 'ACTIVE', currentPrice: null, bidCount: 0 });
+            const msg = await this.sendPost(channel.chatId, caption, this.auctionKeyboard(listing.id, true), photo);
+            await this.prisma.channelPost.create({
+                data: { kind: 'AUCTION', listingId: listing.id, auctionId: auction.id, chatId: channel.chatId, messageId: msg.message_id, isPhoto: Boolean(photo) },
+            });
+            this.logger.log(`✅ Auction posted to channel: ${listing.id}`);
+        } catch (error) {
+            this.logger.error(`❌ Failed to post auction to channel: ${error.message}`);
+        }
+    }
+
+    /** Auksion postini joriy holatga keltirish (yangi taklif, yakun, bekor qilish) */
+    async refreshAuctionPost(auctionId: string): Promise<void> {
+        const posts = await this.prisma.channelPost.findMany({ where: { auctionId, kind: 'AUCTION' } });
+        if (!posts.length) return;
+        const a = await this.prisma.auction.findUnique({
+            where: { id: auctionId },
+            include: {
+                listing: { select: { id: true, title: true, ageYears: true, region: { select: { nameUz: true } }, breed: { select: { name: true } } } },
+                _count: { select: { bids: true } },
+            },
+        });
+        if (!a) return;
+        const caption = this.auctionCaption(a.listing, {
+            status: a.status,
+            currency: a.currency,
+            startPrice: Number(a.startPrice),
+            minStep: Number(a.minStep),
+            currentPrice: a.currentPrice ? Number(a.currentPrice) : null,
+            bidCount: a._count.bids,
+            endsAt: a.endsAt,
+            cancelReason: a.cancelReason,
+        });
+        for (const post of posts) await this.editPost(post, caption, this.auctionKeyboard(a.listing.id, a.status === 'ACTIVE'));
+    }
+
+    /** Admin uchun: kanalga tushadigan barcha ko'rinishlarni o'z chatiga yuborish */
+    async sendChannelPreview(chatId: string): Promise<number> {
+        const cfg = await this.getChannelConfig();
+        const real = await this.prisma.horseListing.findFirst({
+            where: { status: 'APPROVED', media: { some: { type: 'IMAGE' } } },
+            orderBy: { publishedAt: 'desc' },
+            include: this.listingForChannelInclude,
+        });
+        const sample: ListingForChannel & { previousPrice?: { toString(): string } | number | null } = real ?? {
+            id: '00000000-0000-0000-0000-000000000000', slug: 'namuna', title: "Qorabayir ayg'ir, 5 yosh — ko'pkariga tayyor",
+            priceAmount: 45000000, priceCurrency: 'UZS', ageYears: 5, isPremium: false, isTop: false,
+            region: { nameUz: 'Qashqadaryo' }, district: { nameUz: 'Shahrisabz' }, breed: { name: 'Qorabayir' }, media: [],
+        };
+        const photo = sample.media?.[0]?.url ?? null;
+        const price = Number(sample.priceAmount?.toString() ?? 0) || 45000000;
+        const steps: [string, string, any][] = [
+            ['1️⃣ Yangi e\'lon (tasdiqlanganda yoki reklama qilinganda)', this.listingCaption(sample, cfg.url), this.listingKeyboard(sample.id, sample.slug, 'active')],
+            ['2️⃣ Narx tushirilganda — post shu ko\'rinishga tahrirlanadi', this.listingCaption({ ...sample, priceAmount: Math.round(price * 0.9), previousPrice: price }, cfg.url), this.listingKeyboard(sample.id, sample.slug, 'active')],
+            ['3️⃣ "Otbozor orqali sotildi" deb belgilanganda — post tahrirlanadi', this.listingCaption(sample, cfg.url, 'sold', true), this.listingKeyboard(sample.id, sample.slug, 'sold')],
+            ['4️⃣ Sotilmay yopilganda', this.listingCaption(sample, cfg.url, 'closed'), this.listingKeyboard(sample.id, sample.slug, 'closed')],
+        ];
+        const ends = new Date(Date.now() + 3 * 86400000);
+        const step = Math.max(1000, Math.round(price * 0.8 * 0.02 / 1000) * 1000);
+        const base = { currency: sample.priceCurrency || 'UZS', startPrice: Math.round(price * 0.8), minStep: step, endsAt: ends };
+        steps.push(
+            ['5️⃣ Auksion boshlanganda', this.auctionCaption(sample, { ...base, status: 'ACTIVE', currentPrice: null, bidCount: 0 }), this.auctionKeyboard(sample.id, true)],
+            ['6️⃣ Har bir yangi taklifda — post yangilanadi', this.auctionCaption(sample, { ...base, status: 'ACTIVE', currentPrice: base.startPrice + step * 3, bidCount: 4 }), this.auctionKeyboard(sample.id, true)],
+            ['7️⃣ Auksion yakunlanganda', this.auctionCaption(sample, { ...base, status: 'ENDED', currentPrice: base.startPrice + step * 7, bidCount: 9 }), this.auctionKeyboard(sample.id, false)],
+            ['8️⃣ Admin bekor qilganda', this.auctionCaption(sample, { ...base, status: 'CANCELLED', currentPrice: null, bidCount: 2, cancelReason: 'Ot boshqa joyda sotildi' }), this.auctionKeyboard(sample.id, false)],
+        );
+        await this.bot.telegram.sendMessage(chatId, `📺 <b>Kanal postlari namunasi</b>\n\nQuyida kanalga tushadigan va keyin tahrirlanadigan barcha ko'rinishlar. Kanal: ${this.escapeHtml(cfg.chatId || '—')} (${cfg.enabled ? 'yoqilgan' : "hozir o'chiq"})`, { parse_mode: 'HTML' });
+        let sent = 0;
+        for (const [label, caption, kb] of steps) {
+            await this.bot.telegram.sendMessage(chatId, `<i>${this.escapeHtml(label)}</i>`, { parse_mode: 'HTML' });
+            const msg = await this.sendPost(chatId, caption, kb, photo);
+            sent++;
+            if (label.startsWith('3️⃣')) {
+                await this.bot.telegram.sendMessage(
+                    chatId,
+                    `🎉 <b>Ot sotildi!</b>\n\n🐴 ${this.escapeHtml(sample.title)}\n\n🤝 Olganga ham, sotganga ham baraka bersin!\n\n✅ Otbozor orqali sotildi. Otingizni siz ham shu yerda tez soting!`,
+                    { parse_mode: 'HTML', reply_parameters: { message_id: msg.message_id } },
+                );
+            }
+        }
+        return sent;
+    }
+
 
     async notifyAdminNewListing(listing: { id: string; title: string; userId: string; userName?: string }): Promise<void> {
         if (!this.adminChatIds.length) return;
@@ -459,38 +651,7 @@ export class TelegramChannelService {
         }
     }
 
-    /** Kanalga: "Kim oshdi savdosi boshlandi" — Mini App'dagi auksionga tugma bilan */
-    async postAuctionToChannel(
-        listing: { id: string; title: string; ageYears: number | null; region?: { nameUz: string } | null; breed?: { name: string } | null; media?: { url: string }[] },
-        auction: { startPrice: number; minStep: number; currency: string; endsAt: Date },
-    ): Promise<void> {
-        const channel = await this.activeChannel(`auction ${listing.id}`);
-        if (!channel) return;
-        const money = (n: number) => (auction.currency === 'USD' ? `$${n.toLocaleString('en-US')}` : `${n.toLocaleString('uz-UZ')} so'm`);
-        const l = new Date(auction.endsAt.getTime() + 5 * 3600000);
-        const ends = `${String(l.getUTCDate()).padStart(2, '0')}.${String(l.getUTCMonth() + 1).padStart(2, '0')} soat ${String(l.getUTCHours()).padStart(2, '0')}:${String(l.getUTCMinutes()).padStart(2, '0')}`;
-        const caption =
-            `🔨 <b>KIM OSHDI SAVDOSI!</b>\n\n` +
-            `<b>${this.escapeHtml(listing.title)}</b>\n` +
-            (listing.breed ? `🐴 Zoti: ${this.escapeHtml(listing.breed.name)}\n` : '') +
-            (listing.ageYears != null ? `📅 Yoshi: ${listing.ageYears} yosh\n` : '') +
-            (listing.region ? `📍 ${this.escapeHtml(listing.region.nameUz)}\n` : '') +
-            `\n💰 Boshlang'ich narx: <b>${money(auction.startPrice)}</b>\n` +
-            `➕ Qadam: ${money(auction.minStep)}\n` +
-            `⏳ Tugaydi: <b>${ends}</b>\n\n` +
-            `Eng yuqori narxni taklif qilgan xaridor yutadi!`;
-        const botUsername = (this.configService.get<string>('TELEGRAM_BOT_USERNAME') || 'otbozor_bot').replace(/^@/, '');
-        const link = `https://t.me/${botUsername}/app?startapp=l_${listing.id}`;
-        const reply_markup = { inline_keyboard: [[{ text: '🔨 Auksionda qatnashish', url: link }]] };
-        try {
-            const photo = listing.media?.[0]?.url;
-            if (photo) await this.bot.telegram.sendPhoto(channel.chatId, photo, { caption, parse_mode: 'HTML', reply_markup });
-            else await this.bot.telegram.sendMessage(channel.chatId, caption, { parse_mode: 'HTML', reply_markup });
-            this.logger.log(`✅ Auction posted to channel: ${listing.id}`);
-        } catch (error) {
-            this.logger.error(`❌ Failed to post auction to channel: ${error.message}`);
-        }
-    }
+
 
     async postBlogToChannel(post: {
         id: string;
