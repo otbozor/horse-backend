@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, IsArray, IsBoolean, IsInt, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
@@ -7,6 +7,9 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { KopkariService } from './kopkari.service';
+import { KopkariRemindersService } from './kopkari-reminders.service';
+import { Request } from 'express';
+import { optionalUserId } from '../common/viewer.util';
 
 class RegisterDto {
     @IsString() @MaxLength(80)
@@ -71,7 +74,37 @@ const ok = <T>(data: T) => ({ success: true, data, message: 'OK', timestamp: new
 @ApiTags("Ko'pkari: ishtirokchilar va natijalar")
 @Controller()
 export class KopkariController {
-    constructor(private readonly kopkari: KopkariService) { }
+    constructor(
+        private readonly kopkari: KopkariService,
+        private readonly reminders: KopkariRemindersService,
+    ) { }
+
+    @Get('events/:id/going')
+    async going(@Param('id') id: string, @Req() req: Request) {
+        return ok(await this.reminders.goingState(id, optionalUserId(req)));
+    }
+
+    @Post('events/:id/going')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: "Boraman — eslatma olish" })
+    async setGoing(@Param('id') id: string, @CurrentUser() user: User) {
+        return ok(await this.reminders.setGoing(id, user.id, true));
+    }
+
+    @Delete('events/:id/going')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    async unsetGoing(@Param('id') id: string, @CurrentUser() user: User) {
+        return ok(await this.reminders.setGoing(id, user.id, false));
+    }
+
+    @Post('admin/events/:id/remind-test')
+    @UseGuards(JwtAuthGuard, AdminGuard)
+    @ApiBearerAuth()
+    async remindTest(@Param('id') id: string, @CurrentUser() user: User) {
+        return ok(await this.reminders.sendTest(id, user.telegramUserId?.toString()));
+    }
 
     @Get('events/:id/my-registration')
     @UseGuards(JwtAuthGuard)
