@@ -294,7 +294,7 @@ export class TelegramBotService implements OnApplicationBootstrap {
             console.error('❌ Telegram bot contact error:', error);
             await ctx.reply(
                 '❌ Tizimda xatolik yuz berdi.\n\n' +
-                'Iltimos, qaytadan urinib ko\'ring yoki qo\'llab-quvvatlash xizmatiga murojaat qiling.'
+                'Iltimos, qaytadan urinib ko\'ring yoki @doniyorjon_k ga yozing.'
             );
         }
     }
