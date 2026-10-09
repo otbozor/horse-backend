@@ -35,7 +35,7 @@ export const HELP_TEXT =
     '/sozlamalar — bildirishnoma sozlamalari\n\n' +
     '<b>Sotuvchi bilan bot orqali yozishyapsizmi?</b>\n' +
     'Yozgan xabaringiz suhbatdoshga yetkaziladi. Suhbatni «Yakunlash» tugmasi bilan to\'xtatasiz.\n\n' +
-    'Savol yoki muammo bo\'lsa: @otbozor_support';
+    'Savol yoki muammo bo\'lsa: @doniyorjon_k';
 
 export const FALLBACK_TEXT =
     '🤖 Men buyruqlarni tushunaman, oddiy xabarlarni emas.\n\n' +

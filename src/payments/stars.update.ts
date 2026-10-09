@@ -37,7 +37,7 @@ export class StarsUpdate {
             await ctx.reply(`✅ To'lov qabul qilindi: ${sp.total_amount} ⭐\nRahmat! Mini App'da holat avtomatik yangilanadi.`);
         } catch (e) {
             this.logger.error(`successful_payment xatosi: ${e.message} (charge ${sp.telegram_payment_charge_id})`);
-            await ctx.reply("⚠️ To'lov qabul qilindi, lekin qayta ishlashda xatolik bo'ldi. Administrator tekshiradi.").catch(() => { });
+            await ctx.reply("⚠️ To'lov qabul qilindi, lekin qayta ishlashda xatolik bo'ldi. Administrator tekshiradi. Savol bo'lsa: @doniyorjon_k").catch(() => { });
         }
     }
 }
