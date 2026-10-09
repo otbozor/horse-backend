@@ -162,7 +162,7 @@ export class AuctionsService {
             select: {
                 id: true, title: true, ageYears: true,
                 region: { select: { nameUz: true } }, breed: { select: { name: true } },
-                media: { where: { type: 'IMAGE' }, orderBy: { sortOrder: 'asc' }, take: 1, select: { url: true } },
+                media: { where: { type: 'IMAGE' }, orderBy: { sortOrder: 'asc' }, select: { url: true } },
             },
         });
         if (forChannel) {
