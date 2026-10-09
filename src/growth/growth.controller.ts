@@ -95,21 +95,6 @@ export class GrowthController {
 
     // ---------- Bildirishnomalar ----------
 
-    @Get('my/notifications')
-    @UseGuards(JwtAuthGuard)
-    @ApiBearerAuth()
-    async myNotifications(@CurrentUser() user: User) {
-        const u = await this.prisma.user.findUnique({ where: { id: user.id }, select: { digestEnabled: true } });
-        return ok({ digestEnabled: u?.digestEnabled ?? true });
-    }
-
-    @Put('my/notifications')
-    @UseGuards(JwtAuthGuard)
-    @ApiBearerAuth()
-    async setNotifications(@CurrentUser() user: User, @Body() body: { digestEnabled?: boolean }) {
-        return ok(await this.digest.setEnabled(user.id, body?.digestEnabled !== false));
-    }
-
     @Get('admin/digest/settings')
     @UseGuards(JwtAuthGuard, AdminGuard)
     @ApiBearerAuth()

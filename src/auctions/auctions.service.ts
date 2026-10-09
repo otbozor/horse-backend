@@ -3,7 +3,9 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { InjectBot } from 'nestjs-telegraf';
 import { Telegraf } from 'telegraf';
-import { AuctionStatus, ListingStatus, Prisma } from '@prisma/client';
+import { AuctionStatus, ListingStatus, NotificationCategory, Prisma } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
+import { TelegramChannelService } from '../telegram/telegram-channel.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { formatMoney } from '../trust/price-offer-core';
 
@@ -38,6 +40,8 @@ export class AuctionsService {
         private readonly prisma: PrismaService,
         config: ConfigService,
         @InjectBot() private readonly bot: Telegraf,
+        private readonly notifications: NotificationsService,
+        private readonly channel: TelegramChannelService,
     ) {
         this.miniAppUrl = (config.get<string>('MINI_APP_URL') || '').replace(/\/$/, '');
     }
@@ -56,6 +60,9 @@ export class AuctionsService {
             nextMinBid: current != null ? current + minStep : Number(a.startPrice),
             endsAt: a.endsAt,
             bidCount: a._count.bids,
+            cancelRequestReason: viewerId && a.sellerId === viewerId ? a.cancelRequestReason : null,
+            cancelRequested: Boolean(a.cancelRequestedAt),
+            cancelReason: a.status === AuctionStatus.CANCELLED ? a.cancelReason : null,
             isLeader: Boolean(viewerId && a.leaderId === viewerId),
             isSeller: Boolean(viewerId && a.sellerId === viewerId),
             bids: a.bids.map((b) => ({
@@ -69,14 +76,16 @@ export class AuctionsService {
 
     private async notify(chatId: bigint | null | undefined, text: string, listingId: string) {
         if (!chatId) return;
-        await this.bot.telegram
-            .sendMessage(chatId.toString(), text, {
-                parse_mode: 'HTML',
-                ...(this.miniAppUrl
-                    ? { reply_markup: { inline_keyboard: [[{ text: "📱 Auksionni ochish", web_app: { url: `${this.miniAppUrl}/listings/${listingId}` } }]] } }
-                    : {}),
-            })
-            .catch(() => { });
+        const plain = (l: string) => l.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').trim();
+        const [first, second] = text.split('\n');
+        await this.notifications.deliver({
+            telegramUserId: chatId,
+            category: NotificationCategory.AUCTIONS,
+            title: [plain(first), second ? plain(second).replace(/^🐴\s*/, '') : ''].filter(Boolean).join(' · ').slice(0, 120),
+            html: text,
+            link: `/listings/${listingId}`,
+            buttonText: '📱 Auksionni ochish',
+        });
     }
 
     // =================== Ko'rish ===================
@@ -121,6 +130,10 @@ export class AuctionsService {
 
         const startPrice = Math.round(Number(dto.startPrice));
         if (!(startPrice > 0)) throw new BadRequestException("Boshlang'ich narxni kiriting");
+        const listingPrice = Number(listing.priceAmount);
+        if (listingPrice > 0 && startPrice > listingPrice) {
+            throw new BadRequestException(`Boshlang'ich narx e'lon narxidan (${formatMoney(listingPrice, listing.priceCurrency)}) oshmasligi kerak`);
+        }
         const days = Math.round(Number(dto.durationDays));
         if (![1, 3, 5, 7].includes(days)) throw new BadRequestException("Muddat 1, 3, 5 yoki 7 kun bo'lishi mumkin");
         const autoStep = Math.max(1, Math.round(startPrice * 0.02 / 1000) * 1000) || 1;
@@ -137,6 +150,26 @@ export class AuctionsService {
             },
             include: AUCTION_INCLUDE,
         });
+        const seller = await this.prisma.user.findUnique({ where: { id: sellerId }, select: { telegramUserId: true } });
+        void this.notify(
+            seller?.telegramUserId,
+            `🔨 <b>Auksion boshlandi</b>\n🐴 ${esc(listing.title)}\nBoshlang'ich narx: <b>${formatMoney(startPrice, listing.priceCurrency)}</b>\nTugaydi: ${a.endsAt.toISOString().slice(0, 16).replace('T', ' ')} (UTC)\n\nHar bir yangi taklif haqida xabar beramiz.`,
+            listing.id,
+        );
+        // Kanalga e'lon (kanal yoqilgan bo'lsa)
+        const forChannel = await this.prisma.horseListing.findUnique({
+            where: { id: listingId },
+            select: {
+                id: true, title: true, ageYears: true,
+                region: { select: { nameUz: true } }, breed: { select: { name: true } },
+                media: { where: { type: 'IMAGE' }, orderBy: { sortOrder: 'asc' }, take: 1, select: { url: true } },
+            },
+        });
+        if (forChannel) {
+            this.channel
+                .postAuctionToChannel(forChannel, { startPrice, minStep, currency: listing.priceCurrency, endsAt: a.endsAt })
+                .catch(() => { });
+        }
         return this.serialize(a, sellerId);
     }
 
@@ -146,9 +179,105 @@ export class AuctionsService {
         if (!a) throw new NotFoundException('Auksion topilmadi');
         if (a.sellerId !== actorId && !isAdmin) throw new ForbiddenException();
         if (a.status !== AuctionStatus.ACTIVE) throw new BadRequestException('Auksion faol emas');
-        if (a._count.bids > 0 && !isAdmin) throw new BadRequestException("Taklif tushgan auksionni bekor qilib bo'lmaydi");
-        await this.prisma.auction.update({ where: { id: auctionId }, data: { status: AuctionStatus.CANCELLED } });
+        if (a._count.bids > 0 && !isAdmin) {
+            throw new BadRequestException("Taklif tushgan auksionni faqat admin bekor qiladi — «Bekor qilishni so'rash» tugmasidan foydalaning");
+        }
+        return this.adminCancel(auctionId, isAdmin && a.sellerId !== actorId ? 'Admin tomonidan bekor qilindi' : "Sotuvchi bekor qildi");
+    }
+
+    /** Sotuvchi: taklif tushgandan keyin bekor qilishni sabab bilan so'raydi */
+    async requestCancel(auctionId: string, sellerId: string, reason: string) {
+        const text = reason?.trim().slice(0, 500);
+        if (!text || text.length < 5) throw new BadRequestException('Sababini batafsilroq yozing');
+        const a = await this.prisma.auction.findUnique({
+            where: { id: auctionId },
+            include: { listing: { select: { id: true, title: true } }, seller: { select: { displayName: true, telegramUserId: true } } },
+        });
+        if (!a) throw new NotFoundException('Auksion topilmadi');
+        if (a.sellerId !== sellerId) throw new ForbiddenException();
+        if (a.status !== AuctionStatus.ACTIVE) throw new BadRequestException('Auksion faol emas');
+        if (a.cancelRequestedAt) throw new BadRequestException("So'rov allaqachon yuborilgan — admin javobini kuting");
+        await this.prisma.auction.update({ where: { id: auctionId }, data: { cancelRequestReason: text, cancelRequestedAt: new Date() } });
+        void this.notify(
+            a.seller.telegramUserId,
+            `📨 <b>Bekor qilish so'rovingiz yuborildi</b>\n🐴 ${esc(a.listing.title)}\n📝 ${esc(text)}\n\nAdmin ko'rib chiqqach javob beramiz. Shu vaqtgacha auksion davom etadi.`,
+            a.listing.id,
+        );
+        this.channel
+            .notifyAdmins(
+                `🛑 <b>Auksionni bekor qilish so'rovi</b>\n\n🐴 ${esc(a.listing.title)}\n👤 ${esc(a.seller.displayName)}\n📝 ${esc(text)}`,
+                '/admin',
+                "📱 Admin panelda ko'rish",
+            )
+            .catch(() => { });
         return { success: true };
+    }
+
+    /** Admin: auksionni bekor qiladi — sotuvchi va barcha ishtirokchilar xabardor bo'ladi */
+    async adminCancel(auctionId: string, reason?: string) {
+        const a = await this.prisma.auction.findUnique({
+            where: { id: auctionId },
+            include: {
+                listing: { select: { id: true, title: true } },
+                seller: { select: { telegramUserId: true } },
+                bids: { select: { userId: true }, distinct: ['userId'] },
+            },
+        });
+        if (!a) throw new NotFoundException('Auksion topilmadi');
+        if (a.status !== AuctionStatus.ACTIVE) throw new BadRequestException('Auksion faol emas');
+        const why = reason?.trim().slice(0, 500) || a.cancelRequestReason || null;
+        await this.prisma.auction.update({ where: { id: auctionId }, data: { status: AuctionStatus.CANCELLED, cancelReason: why } });
+        const title = esc(a.listing.title);
+        void this.notify(a.seller.telegramUserId, `🛑 <b>Auksion bekor qilindi</b>\n🐴 ${title}${why ? `\n📝 ${esc(why)}` : ''}`, a.listing.id);
+        if (a.bids.length) {
+            const users = await this.prisma.user.findMany({ where: { id: { in: a.bids.map((b) => b.userId) } }, select: { telegramUserId: true } });
+            for (const u of users) {
+                void this.notify(u.telegramUserId, `🛑 <b>Auksion bekor qilindi</b>\n🐴 ${title}${why ? `\n📝 Sabab: ${esc(why)}` : ''}\n\nTaklifingiz kuchini yo'qotdi.`, a.listing.id);
+            }
+        }
+        return { success: true };
+    }
+
+    /** Admin: bekor qilish so'rovini rad etadi — auksion davom etadi */
+    async rejectCancelRequest(auctionId: string, note?: string) {
+        const a = await this.prisma.auction.findUnique({
+            where: { id: auctionId },
+            include: { listing: { select: { id: true, title: true } }, seller: { select: { telegramUserId: true } } },
+        });
+        if (!a || !a.cancelRequestedAt) throw new NotFoundException("So'rov topilmadi");
+        await this.prisma.auction.update({ where: { id: auctionId }, data: { cancelRequestReason: null, cancelRequestedAt: null } });
+        void this.notify(
+            a.seller.telegramUserId,
+            `↩️ <b>Bekor qilish so'rovingiz rad etildi</b>\n🐴 ${esc(a.listing.title)}${note?.trim() ? `\n📝 ${esc(note.trim())}` : ''}\n\nAuksion davom etadi.`,
+            a.listing.id,
+        );
+        return { success: true };
+    }
+
+    /** Admin paneli: faol auksionlar (avval bekor qilish so'rovi borlari) */
+    async adminList() {
+        const rows = await this.prisma.auction.findMany({
+            where: { status: AuctionStatus.ACTIVE },
+            orderBy: [{ cancelRequestedAt: { sort: 'desc', nulls: 'last' } }, { endsAt: 'asc' }],
+            take: 100,
+            include: {
+                listing: { select: { id: true, title: true } },
+                seller: { select: { displayName: true } },
+                _count: { select: { bids: true } },
+            },
+        });
+        return rows.map((a) => ({
+            id: a.id,
+            listing: a.listing,
+            sellerName: a.seller.displayName,
+            currency: a.currency,
+            startPrice: Number(a.startPrice),
+            currentPrice: a.currentPrice ? Number(a.currentPrice) : null,
+            bidCount: a._count.bids,
+            endsAt: a.endsAt,
+            cancelRequestReason: a.cancelRequestReason,
+            cancelRequestedAt: a.cancelRequestedAt,
+        }));
     }
 
     // =================== Xaridor ===================
@@ -208,12 +337,42 @@ export class AuctionsService {
         const price = formatMoney(amount, result.currency);
         void this.notify(prev?.telegramUserId, `⚠️ <b>Taklifingiz oshib ketildi</b>\n🐴 ${esc(result.listing.title)}\nYangi narx: <b>${price}</b>`, result.listing.id);
         void this.notify(seller?.telegramUserId, `🔨 <b>Auksionda yangi taklif</b>\n🐴 ${esc(result.listing.title)}\nJoriy narx: <b>${price}</b>`, result.listing.id);
+        const me = await this.prisma.user.findUnique({ where: { id: userId }, select: { telegramUserId: true } });
+        void this.notify(
+            me?.telegramUserId,
+            `✅ <b>Taklifingiz qabul qilindi</b>\n🐴 ${esc(result.listing.title)}\nSizning taklifingiz: <b>${price}</b>${result.extended ? '\n⏱ Auksion 5 daqiqaga uzaytirildi' : ''}\n\nKimdir oshirsa, darhol xabar beramiz.`,
+            result.listing.id,
+        );
 
         const a = await this.prisma.auction.findUnique({ where: { id: auctionId }, include: AUCTION_INCLUDE });
         return this.serialize(a!, userId);
     }
 
     // =================== Yakunlash ===================
+
+    @Cron(CronExpression.EVERY_MINUTE)
+    async endingSoon() {
+        const soon = await this.prisma.auction.findMany({
+            where: { status: AuctionStatus.ACTIVE, endingSoonNotifiedAt: null, endsAt: { gt: new Date(), lte: new Date(Date.now() + 60 * MINUTE) } },
+            include: {
+                listing: { select: { id: true, title: true } },
+                seller: { select: { telegramUserId: true } },
+                bids: { select: { userId: true }, distinct: ['userId'] },
+            },
+            take: 50,
+        });
+        for (const a of soon) {
+            const claimed = await this.prisma.auction.updateMany({ where: { id: a.id, endingSoonNotifiedAt: null }, data: { endingSoonNotifiedAt: new Date() } });
+            if (claimed.count !== 1) continue;
+            const price = formatMoney(a.currentPrice ?? a.startPrice, a.currency);
+            const text = (who: string) => `⏳ <b>Auksion tugashiga 1 soatdan kam qoldi</b>\n🐴 ${esc(a.listing.title)}\nJoriy narx: <b>${price}</b>${who}`;
+            void this.notify(a.seller.telegramUserId, text(''), a.listing.id);
+            if (a.bids.length) {
+                const users = await this.prisma.user.findMany({ where: { id: { in: a.bids.map((b) => b.userId) } }, select: { id: true, telegramUserId: true } });
+                for (const u of users) void this.notify(u.telegramUserId, text(u.id === a.leaderId ? '\n👑 Hozircha siz yetakchisiz' : "\nTaklifingizni oshirishga ulguring!"), a.listing.id);
+            }
+        }
+    }
 
     @Cron(CronExpression.EVERY_MINUTE)
     async closeExpired() {

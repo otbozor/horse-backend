@@ -3,7 +3,8 @@ import { Cron } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { InjectBot } from 'nestjs-telegraf';
 import { Telegraf } from 'telegraf';
-import { EventStatus, Prisma, RegistrationStatus } from '@prisma/client';
+import { EventStatus, NotificationCategory, Prisma, RegistrationStatus } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const TZ_OFFSET_MS = 5 * 3600000; // Asia/Tashkent, yozgi vaqt yo'q
@@ -38,6 +39,7 @@ export class KopkariRemindersService {
         private readonly prisma: PrismaService,
         config: ConfigService,
         @InjectBot() private readonly bot: Telegraf,
+        private readonly notifications: NotificationsService,
     ) {
         this.miniAppUrl = (config.get<string>('MINI_APP_URL') || '').replace(/\/$/, '');
     }
@@ -137,12 +139,15 @@ export class KopkariRemindersService {
             `🕒 ${date}, soat ${time}\n` +
             (place ? `📍 ${esc(place)}${event.addressText ? ` — ${esc(event.addressText)}` : ''}\n` : '') +
             `\nOmad tilaymiz!`;
-        await this.bot.telegram.sendMessage(chatId, text, {
-            parse_mode: 'HTML',
-            ...(this.miniAppUrl
-                ? { reply_markup: { inline_keyboard: [[{ text: '📱 Tadbirni ochish', web_app: { url: `${this.miniAppUrl}/kopkari/${event.slug}` } }]] } }
-                : {}),
+        const ok = await this.notifications.deliver({
+            telegramUserId: chatId,
+            category: NotificationCategory.KOPKARI,
+            title: `${when === 'tomorrow' ? "Ertaga ko'pkari" : "Bugun ko'pkari"}: ${event.title}`,
+            html: text,
+            link: `/kopkari/${event.slug}`,
+            buttonText: '📱 Tadbirni ochish',
         });
+        if (!ok) throw new Error('not delivered');
     }
 
     /** Admin uchun: eslatma qanday ko'rinishini o'ziga yuborib ko'rish */

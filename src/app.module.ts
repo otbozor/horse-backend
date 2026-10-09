@@ -23,6 +23,7 @@ import { GrowthModule } from './growth/growth.module';
 import { InsightsModule } from './insights/insights.module';
 import { ChatModule } from './chat/chat.module';
 import { AuctionsModule } from './auctions/auctions.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { KopkariModule } from './kopkari/kopkari.module';
 
 @Module({
@@ -82,6 +83,7 @@ import { KopkariModule } from './kopkari/kopkari.module';
         InsightsModule,
         ChatModule,
         AuctionsModule,
+        NotificationsModule,
 
         // Ko'pkari: ishtirokchilar va natijalar
         KopkariModule,

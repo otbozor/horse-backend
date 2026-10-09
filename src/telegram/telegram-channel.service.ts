@@ -3,6 +3,8 @@ import { InjectBot } from 'nestjs-telegraf';
 import { ConfigService } from '@nestjs/config';
 import { Telegraf } from 'telegraf';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationCategory } from '@prisma/client';
 
 export interface ChannelConfig {
     enabled: boolean;
@@ -41,6 +43,7 @@ export class TelegramChannelService {
         @InjectBot() private readonly bot: Telegraf,
         private readonly configService: ConfigService,
         private readonly prisma: PrismaService,
+        private readonly notifications: NotificationsService,
     ) {
         this.channelId = this.configService.get<string>('TELEGRAM_CHANNEL_ID') || '';
         const raw = this.configService.get<string>('TELEGRAM_ADMIN_CHAT_IDS') || '';
@@ -207,11 +210,14 @@ export class TelegramChannelService {
             { text: '❌ Rad etish', callback_data: `offer:r:${offer.id}` },
         ]];
         if (this.miniAppUrl) keyboard.push([{ text: "📱 E'lonni ochish", web_app: { url: `${this.miniAppUrl}/listings/${listing.id}` } }]);
-        try {
-            await this.bot.telegram.sendMessage(sellerTelegramId, text, { parse_mode: 'HTML', reply_markup: { inline_keyboard: keyboard } });
-        } catch (error) {
-            this.logger.error(`❌ Failed to notify seller (price offer): ${error.message}`);
-        }
+        await this.notifications.deliver({
+            telegramUserId: sellerTelegramId,
+            category: NotificationCategory.OFFERS,
+            title: `Yangi narx taklifi: ${offer.amount}`,
+            html: text,
+            link: '/offers',
+            replyMarkup: { inline_keyboard: keyboard },
+        });
     }
 
     /** Xaridorga taklif natijasi; qabul qilinsa sotuvchi kontakti ham yuboriladi */
@@ -230,14 +236,14 @@ export class TelegramChannelService {
             if (sellerContact.phone) text += `\n📞 ${this.escapeHtml(sellerContact.phone)}`;
             if (sellerContact.telegram) text += `\n✈️ @${this.escapeHtml(sellerContact.telegram.replace(/^@/, ''))}`;
         }
-        try {
-            await this.bot.telegram.sendMessage(buyerTelegramId, text, {
-                parse_mode: 'HTML',
-                ...this.miniAppButton("📱 E'lonni ochish", `/listings/${listing.id}`),
-            });
-        } catch (error) {
-            this.logger.error(`❌ Failed to notify buyer (offer result): ${error.message}`);
-        }
+        await this.notifications.deliver({
+            telegramUserId: buyerTelegramId,
+            category: NotificationCategory.OFFERS,
+            title: accepted ? `Taklifingiz qabul qilindi: ${amount}` : `Taklifingiz rad etildi: ${amount}`,
+            html: text,
+            link: `/listings/${listing.id}`,
+            buttonText: "📱 E'lonni ochish",
+        });
     }
 
     // ---------- Saqlangan qidiruv ----------
@@ -253,18 +259,15 @@ export class TelegramChannelService {
             `🐴 ${this.escapeHtml(listing.title)}\n` +
             `💰 <b>${this.escapeHtml(listing.price)}</b>` +
             (listing.place ? `\n📍 ${this.escapeHtml(listing.place)}` : '');
-        const extra = { parse_mode: 'HTML' as const, ...this.miniAppButton("📱 E'lonni ko'rish", `/listings/${listing.id}`) };
-        try {
-            if (listing.photoUrl) {
-                await this.bot.telegram.sendPhoto(telegramUserId, listing.photoUrl, { caption, ...extra });
-            } else {
-                await this.bot.telegram.sendMessage(telegramUserId, caption, extra);
-            }
-            return true;
-        } catch (error) {
-            this.logger.error(`❌ Failed to notify saved search match: ${error.message}`);
-            return false;
-        }
+        return this.notifications.deliver({
+            telegramUserId,
+            category: NotificationCategory.SEARCHES,
+            title: `"${searchLabel}" qidiruvingizga yangi e'lon`,
+            html: caption,
+            link: `/listings/${listing.id}`,
+            buttonText: "📱 E'lonni ko'rish",
+            photoUrl: listing.photoUrl,
+        });
     }
 
     // ---------- "Ot kerak" so'rovlari ----------
@@ -284,14 +287,14 @@ export class TelegramChannelService {
         if (responder.telegram) text += `\n✈️ @${this.escapeHtml(responder.telegram.replace(/^@/, ''))}`;
         if (listing) text += `\n\n🐴 Taklif: <b>${this.escapeHtml(listing.title)}</b> — ${this.escapeHtml(listing.price)}`;
         if (message) text += `\n\n📝 ${this.escapeHtml(message)}`;
-        try {
-            await this.bot.telegram.sendMessage(requesterTelegramId, text, {
-                parse_mode: 'HTML',
-                ...this.miniAppButton(listing ? "📱 Taklif qilingan otni ko'rish" : "📱 So'rovni ochish", listing ? `/listings/${listing.id}` : `/requests/${request.id}`),
-            });
-        } catch (error) {
-            this.logger.error(`❌ Failed to notify request response: ${error.message}`);
-        }
+        await this.notifications.deliver({
+            telegramUserId: requesterTelegramId,
+            category: NotificationCategory.OFFERS,
+            title: `So'rovingizga javob keldi: ${request.title}`,
+            html: text,
+            link: listing ? `/listings/${listing.id}` : `/requests/${request.id}`,
+            buttonText: listing ? "📱 Taklif qilingan otni ko'rish" : "📱 So'rovni ochish",
+        });
     }
 
     // ---------- Xizmatlar ----------
@@ -317,14 +320,13 @@ export class TelegramChannelService {
         const text = approved
             ? `✅ <b>Xizmatingiz katalogga qo'shildi!</b>\n\n🛠 ${this.escapeHtml(service.title)}`
             : `❌ <b>Xizmatingiz rad etildi</b>\n\n🛠 ${this.escapeHtml(service.title)}` + (reason ? `\n📝 Sabab: ${this.escapeHtml(reason)}` : '');
-        try {
-            await this.bot.telegram.sendMessage(telegramUserId, text, {
-                parse_mode: 'HTML',
-                ...this.miniAppButton("📱 Mini App'da ochish", approved ? `/services/${service.id}` : '/my-listings'),
-            });
-        } catch (error) {
-            this.logger.error(`❌ Failed to notify user (service result): ${error.message}`);
-        }
+        await this.notifications.deliver({
+            telegramUserId,
+            category: NotificationCategory.LISTINGS,
+            title: approved ? `Xizmatingiz tasdiqlandi: ${service.title}` : `Xizmatingiz rad etildi: ${service.title}`,
+            html: text,
+            link: approved ? `/services/${service.id}` : '/my-listings',
+        });
     }
 
     // ---------- Shikoyat ----------
@@ -355,30 +357,30 @@ export class TelegramChannelService {
             `${'★'.repeat(stars)}${'☆'.repeat(5 - stars)}\n` +
             `👤 ${this.escapeHtml(reviewerName)}` +
             (comment ? `\n\n“${this.escapeHtml(comment)}”` : '');
-        try {
-            await this.bot.telegram.sendMessage(sellerTelegramId, text, {
-                parse_mode: 'HTML',
-                ...this.miniAppButton('📱 Javob yozish', `/sellers/${sellerId}`),
-            });
-        } catch (error) {
-            this.logger.error(`❌ Failed to notify seller (review): ${error.message}`);
-        }
+        await this.notifications.deliver({
+            telegramUserId: sellerTelegramId,
+            category: NotificationCategory.OFFERS,
+            title: `Sizga yangi baho: ${'★'.repeat(stars)}`,
+            html: text,
+            link: `/sellers/${sellerId}`,
+            buttonText: '📱 Javob yozish',
+        });
     }
 
     async notifyUserPromoted(telegramUserId: string, listing: { id: string; title: string }, packageName: string, days: number): Promise<void> {
-        try {
-            const text =
-                `🚀 <b>E'loningiz reklama qilindi!</b>\n\n` +
-                `🐴 ${this.escapeHtml(listing.title)}\n` +
-                `📦 ${this.escapeHtml(packageName)}${days ? ` — ${days} kun` : ''}\n\n` +
-                `E'loningiz ro'yxat tepasida ko'rsatiladi.`;
-            await this.bot.telegram.sendMessage(telegramUserId, text, {
-                parse_mode: 'HTML',
-                ...this.miniAppButton("📱 E'lonni ochish", `/listings/${listing.id}`),
-            });
-        } catch (error) {
-            this.logger.error(`❌ Failed to notify user (promoted): ${error.message}`);
-        }
+        const text =
+            `🚀 <b>E'loningiz reklama qilindi!</b>\n\n` +
+            `🐴 ${this.escapeHtml(listing.title)}\n` +
+            `📦 ${this.escapeHtml(packageName)}${days ? ` — ${days} kun` : ''}\n\n` +
+            `E'loningiz ro'yxat tepasida ko'rsatiladi.`;
+        await this.notifications.deliver({
+            telegramUserId,
+            category: NotificationCategory.LISTINGS,
+            title: `E'loningiz reklama qilindi: ${packageName}`,
+            html: text,
+            link: `/listings/${listing.id}`,
+            buttonText: "📱 E'lonni ochish",
+        });
     }
 
     async notifyUserListingResult(
@@ -387,59 +389,45 @@ export class TelegramChannelService {
         listing: { id: string; title: string },
         rejectReason?: string,
     ): Promise<void> {
-        try {
-            const myListingsLink = `${this.frontendUrl}/profil/elonlarim`;
-            const text = action === 'approved'
-                ? `✅ <b>E'loningiz tasdiqlandi!</b>\n\n` +
-                `🐴 ${this.escapeHtml(listing.title)}\n\n` +
-                `<a href="${myListingsLink}">Mening e'lonlarim →</a>`
-                : `❌ <b>E'loningiz rad etildi</b>\n\n` +
-                `🐴 ${this.escapeHtml(listing.title)}\n` +
-                (rejectReason ? `\n📝 Sabab: ${this.escapeHtml(rejectReason)}\n` : '') +
-                `\n<a href="${myListingsLink}">Mening e'lonlarim →</a>`;
-
-            await this.bot.telegram.sendMessage(telegramUserId, text, {
-                parse_mode: 'HTML',
-                ...this.miniAppButton("📱 Mini App'da ochish", action === 'approved' ? `/listings/${listing.id}` : '/my-listings'),
-            });
-        } catch (error) {
-            this.logger.error(`❌ Failed to notify user (listing ${action}): ${error.message}`);
-        }
+        const text = action === 'approved'
+            ? `✅ <b>E'loningiz tasdiqlandi!</b>\n\n🐴 ${this.escapeHtml(listing.title)}\n\nE'loningiz bozorda ko'rinmoqda.`
+            : `❌ <b>E'loningiz rad etildi</b>\n\n🐴 ${this.escapeHtml(listing.title)}` +
+            (rejectReason ? `\n\n📝 Sabab: ${this.escapeHtml(rejectReason)}` : '') +
+            `\n\nTahrirlab, qayta yuborishingiz mumkin.`;
+        await this.notifications.deliver({
+            telegramUserId,
+            category: NotificationCategory.LISTINGS,
+            title: action === 'approved' ? `E'loningiz tasdiqlandi: ${listing.title}` : `E'loningiz rad etildi: ${listing.title}`,
+            html: text,
+            link: action === 'approved' ? `/listings/${listing.id}` : '/my-listings',
+        });
     }
 
     async notifyUserProductResult(
         telegramUserId: string,
         product: { id: string; title: string; slug?: string },
     ): Promise<void> {
-        try {
-            const myListingsLink = `${this.frontendUrl}/profil/elonlarim`;
-            const text =
-                `✅ <b>Mahsulotingiz tasdiqlandi!</b>\n\n` +
-                `📦 ${this.escapeHtml(product.title)}\n\n` +
-                `<a href="${myListingsLink}">Mening e'lonlarim →</a>`;
-
-            await this.bot.telegram.sendMessage(telegramUserId, text, { parse_mode: 'HTML' });
-        } catch (error) {
-            this.logger.error(`❌ Failed to notify user (product published): ${error.message}`);
-        }
+        await this.notifications.deliver({
+            telegramUserId,
+            category: NotificationCategory.LISTINGS,
+            title: `Mahsulotingiz tasdiqlandi: ${product.title}`,
+            html: `✅ <b>Mahsulotingiz tasdiqlandi!</b>\n\n📦 ${this.escapeHtml(product.title)}\n\nMahsulot do'konda ko'rinmoqda.`,
+            link: product.slug ? `/products/${product.slug}` : '/my-listings',
+        });
     }
 
     async notifyUserListingExpired(
         telegramUserId: string,
         listing: { id: string; title: string },
     ): Promise<void> {
-        try {
-            const reactivateLink = `${this.frontendUrl}/elon/${listing.id}/nashr-tolov`;
-            const text =
-                `⏰ <b>E'loningiz muddati tugadi!</b>\n\n` +
-                `🐴 ${this.escapeHtml(listing.title)}\n\n` +
-                `E'lonni qayta faollashtirish uchun quyidagi havolani bosing:\n` +
-                `<a href="${reactivateLink}">🔄 Faollashtirish →</a>`;
-
-            await this.bot.telegram.sendMessage(telegramUserId, text, { parse_mode: 'HTML' });
-        } catch (error) {
-            this.logger.error(`❌ Failed to notify user (listing expired): ${error.message}`);
-        }
+        await this.notifications.deliver({
+            telegramUserId,
+            category: NotificationCategory.LISTINGS,
+            title: `E'lon muddati tugadi: ${listing.title}`,
+            html: `⏰ <b>E'loningiz muddati tugadi!</b>\n\n🐴 ${this.escapeHtml(listing.title)}\n\nMini App'da qayta faollashtirishingiz mumkin.`,
+            link: '/my-listings',
+            buttonText: '🔄 Qayta faollashtirish',
+        });
     }
 
     private escapeHtml(text: string): string {
@@ -461,6 +449,47 @@ export class TelegramChannelService {
 
     private getAgeEmoji(ageYears: number | null): string {
         return '⚡';
+    }
+
+    /** Adminlarga umumiy xabar (Mini App tugmasi bilan) */
+    async notifyAdmins(html: string, path?: string, buttonText = "📱 Mini App'da ochish"): Promise<void> {
+        const extra = path ? this.miniAppButton(buttonText, path) : {};
+        for (const chatId of this.adminChatIds) {
+            await this.bot.telegram.sendMessage(chatId, html, { parse_mode: 'HTML', ...extra }).catch((e) => this.logger.error(`Admin notify failed: ${e.message}`));
+        }
+    }
+
+    /** Kanalga: "Kim oshdi savdosi boshlandi" — Mini App'dagi auksionga tugma bilan */
+    async postAuctionToChannel(
+        listing: { id: string; title: string; ageYears: number | null; region?: { nameUz: string } | null; breed?: { name: string } | null; media?: { url: string }[] },
+        auction: { startPrice: number; minStep: number; currency: string; endsAt: Date },
+    ): Promise<void> {
+        const channel = await this.activeChannel(`auction ${listing.id}`);
+        if (!channel) return;
+        const money = (n: number) => (auction.currency === 'USD' ? `$${n.toLocaleString('en-US')}` : `${n.toLocaleString('uz-UZ')} so'm`);
+        const l = new Date(auction.endsAt.getTime() + 5 * 3600000);
+        const ends = `${String(l.getUTCDate()).padStart(2, '0')}.${String(l.getUTCMonth() + 1).padStart(2, '0')} soat ${String(l.getUTCHours()).padStart(2, '0')}:${String(l.getUTCMinutes()).padStart(2, '0')}`;
+        const caption =
+            `🔨 <b>KIM OSHDI SAVDOSI!</b>\n\n` +
+            `<b>${this.escapeHtml(listing.title)}</b>\n` +
+            (listing.breed ? `🐴 Zoti: ${this.escapeHtml(listing.breed.name)}\n` : '') +
+            (listing.ageYears != null ? `📅 Yoshi: ${listing.ageYears} yosh\n` : '') +
+            (listing.region ? `📍 ${this.escapeHtml(listing.region.nameUz)}\n` : '') +
+            `\n💰 Boshlang'ich narx: <b>${money(auction.startPrice)}</b>\n` +
+            `➕ Qadam: ${money(auction.minStep)}\n` +
+            `⏳ Tugaydi: <b>${ends}</b>\n\n` +
+            `Eng yuqori narxni taklif qilgan xaridor yutadi!`;
+        const botUsername = (this.configService.get<string>('TELEGRAM_BOT_USERNAME') || 'otbozor_bot').replace(/^@/, '');
+        const link = `https://t.me/${botUsername}/app?startapp=l_${listing.id}`;
+        const reply_markup = { inline_keyboard: [[{ text: '🔨 Auksionda qatnashish', url: link }]] };
+        try {
+            const photo = listing.media?.[0]?.url;
+            if (photo) await this.bot.telegram.sendPhoto(channel.chatId, photo, { caption, parse_mode: 'HTML', reply_markup });
+            else await this.bot.telegram.sendMessage(channel.chatId, caption, { parse_mode: 'HTML', reply_markup });
+            this.logger.log(`✅ Auction posted to channel: ${listing.id}`);
+        } catch (error) {
+            this.logger.error(`❌ Failed to post auction to channel: ${error.message}`);
+        }
     }
 
     async postBlogToChannel(post: {

@@ -29,6 +29,8 @@ model User {
   digestEnabled        Boolean           @default(true) @map("digest_enabled")
   /// Bot orqali yashirin suhbatda oxirgi faol suhbat (oddiy xabar shu suhbatga ketadi)
   activeChatThreadId   String?           @map("active_chat_thread_id")
+  /// Bildirishnoma turlari bo'yicha bot xabarlari: { LISTINGS: false, ... }
+  notificationPrefs    Json              @default("{}") @map("notification_prefs")
   auditLogs            AuditLog[]
   comments             Comment[]
   favorites            Favorite[]
@@ -53,6 +55,7 @@ model User {
   auctionsAsSeller     Auction[]         @relation("AuctionSeller")
   auctionsLeading      Auction[]         @relation("AuctionLeader")
   bids                 Bid[]
+  notifications        Notification[]
 
   @@map("users")
 }
@@ -816,6 +819,11 @@ model Auction {
   status       AuctionStatus @default(ACTIVE)
   endsAt       DateTime      @map("ends_at")
   createdAt    DateTime      @default(now()) @map("created_at")
+  /// Sotuvchining bekor qilish so'rovi (taklif tushgandan keyin faqat admin bekor qiladi)
+  cancelRequestReason String?   @map("cancel_request_reason")
+  cancelRequestedAt   DateTime? @map("cancel_requested_at")
+  cancelReason        String?   @map("cancel_reason")
+  endingSoonNotifiedAt DateTime? @map("ending_soon_notified_at")
   listing      HorseListing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
   seller       User          @relation("AuctionSeller", fields: [sellerId], references: [id], onDelete: Cascade)
   leader       User?         @relation("AuctionLeader", fields: [leaderId], references: [id])
@@ -843,6 +851,31 @@ enum AuctionStatus {
   ACTIVE
   ENDED
   CANCELLED
+}
+
+/// Mini App'dagi bildirishnomalar ro'yxati (bot xabarlarining nusxasi)
+model Notification {
+  id        String               @id @default(uuid())
+  userId    String               @map("user_id")
+  category  NotificationCategory
+  title     String
+  body      String?
+  link      String?
+  readAt    DateTime?            @map("read_at")
+  createdAt DateTime             @default(now()) @map("created_at")
+  user      User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+enum NotificationCategory {
+  LISTINGS
+  OFFERS
+  SEARCHES
+  AUCTIONS
+  KOPKARI
+  SYSTEM
 }
 
 enum ContactType {
