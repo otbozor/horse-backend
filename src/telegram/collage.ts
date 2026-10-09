@@ -2,19 +2,37 @@ import sharp = require('sharp');
 
 const BG = { r: 11, g: 46, b: 27, alpha: 1 }; // to'q yashil fon
 const GAP = 8;
+const W = 1280;
 
-async function load(url: string): Promise<Buffer | null> {
+interface Img { buf: Buffer; ratio: number }
+interface Cell { left: number; top: number; w: number; h: number }
+
+async function load(url: string): Promise<Img | null> {
     try {
         const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
         if (!res.ok) return null;
-        return Buffer.from(await res.arrayBuffer());
+        // EXIF bo'yicha aylantirib olamiz, nisbat to'g'ri hisoblansin
+        const buf = await sharp(Buffer.from(await res.arrayBuffer())).rotate().toBuffer();
+        const m = await sharp(buf).metadata();
+        if (!m.width || !m.height) return null;
+        return { buf, ratio: m.width / m.height };
     } catch {
         return null;
     }
 }
 
-async function cell(buf: Buffer, w: number, h: number) {
-    return sharp(buf).rotate().resize(w, h, { fit: 'cover', position: 'attention' }).jpeg({ quality: 88 }).toBuffer();
+/**
+ * Rasm katakka kesilmasdan to'liq sig'adi; bo'sh qolgan joy shu rasmning
+ * xiralashtirilgan, qoraytirilgan nusxasi bilan to'ldiriladi.
+ */
+async function cell(img: Img, w: number, h: number) {
+    const bg = await sharp(img.buf).resize(w, h, { fit: 'cover' }).blur(24).modulate({ brightness: 0.55 }).toBuffer();
+    const fg = await sharp(img.buf).resize(w, h, { fit: 'inside' }).toBuffer();
+    const m = await sharp(fg).metadata();
+    return sharp(bg)
+        .composite([{ input: fg, left: Math.round((w - m.width!) / 2), top: Math.round((h - m.height!) / 2) }])
+        .jpeg({ quality: 88 })
+        .toBuffer();
 }
 
 /** "+N" belgisi: oxirgi katak ustiga qoraytirilgan qatlam va son */
@@ -29,41 +47,65 @@ function moreOverlay(w: number, h: number, more: number) {
 }
 
 /**
- * Bir nechta rasmdan bitta kollaj (JPEG).
- * 2 ta — yonma-yon; 3 ta — chapda katta, o'ngda ikkita; 4+ — 2×2, oxirgisida "+N".
- * Rasm yuklanmasa null (chaqiruvchi bitta rasmga qaytadi).
+ * Joylashuv rasmlar shakliga qarab tanlanadi, shunda bo'sh joy kam qoladi:
+ * 2 ta — yotiq rasmlar ustma-ust, tik rasmlar yonma-yon;
+ * 3 ta — yotiq bo'lsa tepada katta + pastda ikkita, aks holda chapda katta + o'ngda ikkita;
+ * 4+ — 2×2, oxirgisida "+N".
  */
-export async function buildCollage(urls: string[]): Promise<Buffer | null> {
-    const loaded = (await Promise.all(urls.slice(0, 10).map(load))).filter((b): b is Buffer => Boolean(b));
-    if (loaded.length < 2) return null;
-    const total = urls.length;
-
-    let W: number;
-    let H: number;
-    let cells: { left: number; top: number; w: number; h: number }[];
-    if (loaded.length === 2) {
-        W = 1280; H = 800;
-        const w = (W - GAP) / 2;
-        cells = [{ left: 0, top: 0, w, h: H }, { left: w + GAP, top: 0, w, h: H }];
-    } else if (loaded.length === 3) {
-        W = 1280; H = 1280;
-        const big = 840;
-        const small = (H - GAP) / 2;
-        cells = [
-            { left: 0, top: 0, w: big, h: H },
-            { left: big + GAP, top: 0, w: W - big - GAP, h: small },
-            { left: big + GAP, top: small + GAP, w: W - big - GAP, h: small },
-        ];
-    } else {
-        W = 1280; H = 1280;
-        const s = (W - GAP) / 2;
-        cells = [
-            { left: 0, top: 0, w: s, h: s },
-            { left: s + GAP, top: 0, w: s, h: s },
-            { left: 0, top: s + GAP, w: s, h: s },
-            { left: s + GAP, top: s + GAP, w: s, h: s },
-        ];
+function layout(imgs: Img[]): { H: number; cells: Cell[] } {
+    const landscape = imgs.reduce((s, i) => s + i.ratio, 0) / imgs.length > 1.1;
+    const half = (W - GAP) / 2;
+    if (imgs.length === 2) {
+        if (landscape) {
+            const h = Math.round(W / 1.6);
+            return { H: h * 2 + GAP, cells: [{ left: 0, top: 0, w: W, h }, { left: 0, top: h + GAP, w: W, h }] };
+        }
+        const h = Math.round(half / 0.75);
+        return { H: h, cells: [{ left: 0, top: 0, w: half, h }, { left: half + GAP, top: 0, w: half, h }] };
     }
+    if (imgs.length === 3) {
+        if (landscape) {
+            const top = Math.round(W / 1.6);
+            const sh = Math.round(half / 1.4);
+            return {
+                H: top + GAP + sh,
+                cells: [
+                    { left: 0, top: 0, w: W, h: top },
+                    { left: 0, top: top + GAP, w: half, h: sh },
+                    { left: half + GAP, top: top + GAP, w: half, h: sh },
+                ],
+            };
+        }
+        const H = 1280;
+        const big = 760;
+        const small = (H - GAP) / 2;
+        return {
+            H,
+            cells: [
+                { left: 0, top: 0, w: big, h: H },
+                { left: big + GAP, top: 0, w: W - big - GAP, h: small },
+                { left: big + GAP, top: small + GAP, w: W - big - GAP, h: small },
+            ],
+        };
+    }
+    const h = Math.round(landscape ? half / 1.33 : half);
+    return {
+        H: h * 2 + GAP,
+        cells: [
+            { left: 0, top: 0, w: half, h },
+            { left: half + GAP, top: 0, w: half, h },
+            { left: 0, top: h + GAP, w: half, h },
+            { left: half + GAP, top: h + GAP, w: half, h },
+        ],
+    };
+}
+
+/** Bir nechta rasmdan bitta kollaj (JPEG). Rasm yuklanmasa null (chaqiruvchi bitta rasmga qaytadi). */
+export async function buildCollage(urls: string[]): Promise<Buffer | null> {
+    const loaded = (await Promise.all(urls.slice(0, 10).map(load))).filter((b): b is Img => Boolean(b));
+    if (loaded.length < 2) return null;
+    const { H, cells } = layout(loaded.slice(0, 4));
+    const more = urls.length - cells.length;
 
     const layers: sharp.OverlayOptions[] = [];
     for (let i = 0; i < cells.length; i++) {
@@ -71,7 +113,6 @@ export async function buildCollage(urls: string[]): Promise<Buffer | null> {
         const w = Math.round(c.w);
         const h = Math.round(c.h);
         let img = await cell(loaded[i], w, h);
-        const more = total - cells.length;
         if (i === cells.length - 1 && more > 0) {
             img = await sharp(img).composite([{ input: moreOverlay(w, h, more), top: 0, left: 0 }]).jpeg({ quality: 88 }).toBuffer();
         }
