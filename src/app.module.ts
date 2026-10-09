@@ -21,6 +21,7 @@ import { ServicesCatalogModule } from './services-catalog/services-catalog.modul
 import { EngagementModule } from './engagement/engagement.module';
 import { GrowthModule } from './growth/growth.module';
 import { InsightsModule } from './insights/insights.module';
+import { ChatModule } from './chat/chat.module';
 import { KopkariModule } from './kopkari/kopkari.module';
 
 @Module({
@@ -78,6 +79,7 @@ import { KopkariModule } from './kopkari/kopkari.module';
         // Ommaviy xabar, bannerlar, referal
         GrowthModule,
         InsightsModule,
+        ChatModule,
 
         // Ko'pkari: ishtirokchilar va natijalar
         KopkariModule,

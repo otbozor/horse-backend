@@ -5,6 +5,7 @@ import { TelegramBotService } from './telegram.service';
 import { TelegramChannelService } from './telegram-channel.service';
 import { AuthModule } from '../auth/auth.module';
 import { ChannelSettingsController } from './channel-settings.controller';
+import { ChatModule } from '../chat/chat.module';
 
 @Module({
     imports: [
@@ -16,6 +17,7 @@ import { ChannelSettingsController } from './channel-settings.controller';
             inject: [ConfigService],
         }),
         AuthModule,
+        ChatModule,
     ],
     controllers: [ChannelSettingsController],
     providers: [TelegramBotService, TelegramChannelService],
