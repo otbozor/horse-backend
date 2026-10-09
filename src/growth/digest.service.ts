@@ -35,9 +35,37 @@ export class DigestService {
         this.miniAppUrl = (config.get<string>('MINI_APP_URL') || '').replace(/\/$/, '');
     }
 
+    /** Admin paneldagi umumiy kalit (standart o'chiq — e'lonlar ko'paygach yoqiladi) */
+    async isGloballyEnabled() {
+        const row = await this.prisma.appSetting.findUnique({ where: { key: 'digest_enabled' } });
+        return row?.value === 'true';
+    }
+
+    async setGloballyEnabled(enabled: boolean) {
+        await this.prisma.appSetting.upsert({
+            where: { key: 'digest_enabled' },
+            update: { value: String(enabled) },
+            create: { key: 'digest_enabled', value: String(enabled) },
+        });
+        return this.adminSettings();
+    }
+
+    async adminSettings() {
+        const [enabled, recipients, listingsThisWeek] = await Promise.all([
+            this.isGloballyEnabled(),
+            this.prisma.user.count({ where: { telegramUserId: { not: null }, status: UserStatus.ACTIVE, digestEnabled: true } }),
+            this.prisma.horseListing.count({ where: { status: ListingStatus.APPROVED, publishedAt: { gte: new Date(Date.now() - 7 * DAY) } } }),
+        ]);
+        return { enabled, recipients, listingsThisWeek };
+    }
+
     @Cron('0 10 * * 1', { timeZone: 'Asia/Tashkent' })
     async weekly() {
         if (this.running) return;
+        if (!(await this.isGloballyEnabled())) {
+            this.logger.log("📰 Haftalik dayjest admin tomonidan o'chirilgan — yuborilmadi");
+            return;
+        }
         this.running = true;
         try {
             const users = await this.prisma.user.findMany({
