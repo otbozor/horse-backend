@@ -4,6 +4,7 @@ import { IsIn, IsNumber, IsOptional, Min } from 'class-validator';
 import { User } from '@prisma/client';
 import { Request } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { AdminGuard } from '../common/guards/admin.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { optionalUserId } from '../common/viewer.util';
 import { AuctionsService } from './auctions.service';
@@ -55,6 +56,35 @@ export class AuctionsController {
     @ApiBearerAuth()
     async cancel(@Param('id') id: string, @CurrentUser() user: User) {
         return ok(await this.auctions.cancel(id, user.id, user.isAdmin));
+    }
+
+    @Post('auctions/:id/cancel-request')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: "Sotuvchi: bekor qilishni sabab bilan so'rash" })
+    async requestCancel(@Param('id') id: string, @Body() body: { reason: string }, @CurrentUser() user: User) {
+        return ok(await this.auctions.requestCancel(id, user.id, body?.reason));
+    }
+
+    @Get('admin/auctions')
+    @UseGuards(JwtAuthGuard, AdminGuard)
+    @ApiBearerAuth()
+    async adminList() {
+        return ok(await this.auctions.adminList());
+    }
+
+    @Post('admin/auctions/:id/cancel')
+    @UseGuards(JwtAuthGuard, AdminGuard)
+    @ApiBearerAuth()
+    async adminCancel(@Param('id') id: string, @Body() body: { reason?: string }) {
+        return ok(await this.auctions.adminCancel(id, body?.reason));
+    }
+
+    @Post('admin/auctions/:id/reject-cancel')
+    @UseGuards(JwtAuthGuard, AdminGuard)
+    @ApiBearerAuth()
+    async rejectCancel(@Param('id') id: string, @Body() body: { note?: string }) {
+        return ok(await this.auctions.rejectCancelRequest(id, body?.note));
     }
 
     @Post('auctions/:id/bids')

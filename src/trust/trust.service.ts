@@ -1,8 +1,10 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { ListingStatus, PriceOfferStatus, ReportReason, ReportStatus } from '@prisma/client';
+import { ListingStatus, NotificationCategory, PriceOfferStatus, ReportReason, ReportStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramChannelService } from '../telegram/telegram-channel.service';
 import { formatMoney, resolvePriceOffer } from './price-offer-core';
+import { NotificationsService } from '../notifications/notifications.service';
+const escN = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 const REASON_LABELS: Record<ReportReason, string> = {
     FRAUD: 'Firibgarlik',
@@ -20,6 +22,7 @@ export class TrustService {
     constructor(
         private readonly prisma: PrismaService,
         private readonly notifier: TelegramChannelService,
+        private readonly notifications: NotificationsService,
     ) { }
 
     // =================== Shikoyatlar ===================
@@ -79,8 +82,17 @@ export class TrustService {
     }
 
     async resolveReport(reportId: string, action: 'dismiss' | 'resolve' | 'archive') {
-        const report = await this.prisma.listingReport.findUnique({ where: { id: reportId } });
+        const report = await this.prisma.listingReport.findUnique({ where: { id: reportId }, include: { listing: { select: { title: true } } } });
         if (!report) throw new NotFoundException('Shikoyat topilmadi');
+        // Shikoyat qilgan foydalanuvchiga natija
+        const verdict = action === 'dismiss' ? "qoidabuzarlik topilmadi" : action === 'archive' ? "e'lon olib tashlandi" : 'chora ko\'rildi';
+        void this.notifications.deliver({
+            userId: report.reporterId,
+            category: NotificationCategory.SYSTEM,
+            title: `Shikoyatingiz ko'rib chiqildi: ${verdict}`,
+            html: `🚩 <b>Shikoyatingiz ko'rib chiqildi</b>\n\n🐴 ${escN(report.listing.title)}\nNatija: <b>${verdict}</b>\n\nXabar berganingiz uchun rahmat!`,
+            link: action === 'archive' ? null : `/listings/${report.listingId}`,
+        });
         const status = action === 'dismiss' ? ReportStatus.DISMISSED : ReportStatus.RESOLVED;
         if (action === 'archive') {
             await this.prisma.horseListing.update({ where: { id: report.listingId }, data: { status: ListingStatus.ARCHIVED } });
@@ -153,10 +165,20 @@ export class TrustService {
         if (!review) throw new NotFoundException('Sharh topilmadi');
         if (review.sellerId !== sellerId) throw new ForbiddenException('Faqat sotuvchi javob yoza oladi');
         const text = reply?.trim().slice(0, 1000);
-        return this.prisma.sellerReview.update({
+        const updated = await this.prisma.sellerReview.update({
             where: { id: reviewId },
             data: { sellerReply: text || null, sellerRepliedAt: text ? new Date() : null },
         });
+        if (text) {
+            void this.notifications.deliver({
+                userId: review.reviewerId,
+                category: NotificationCategory.OFFERS,
+                title: 'Sotuvchi sharhingizga javob yozdi',
+                html: `💬 <b>Sotuvchi sharhingizga javob yozdi</b>\n\n“${escN(text.slice(0, 300))}”`,
+                link: `/sellers/${sellerId}`,
+            });
+        }
+        return updated;
     }
 
     async deleteReview(reviewId: string, userId: string, isAdmin: boolean) {
@@ -202,6 +224,15 @@ export class TrustService {
                 )
                 .catch(() => { });
         }
+        void this.notifications.deliver({
+            userId: buyerId,
+            category: NotificationCategory.OFFERS,
+            title: `Taklifingiz yuborildi: ${formatMoney(value, listing.priceCurrency)}`,
+            html:
+                `📤 <b>Narx taklifingiz sotuvchiga yuborildi</b>\n\n🐴 ${escN(listing.title)}\n💰 ${formatMoney(value, listing.priceCurrency)}\n\n` +
+                `Sotuvchi javob berishi bilan xabar beramiz.`,
+            link: '/offers',
+        });
         return { ...offer, amount: Number(offer.amount) };
     }
 
@@ -260,6 +291,16 @@ export class TrustService {
         if (!offer || offer.buyerId !== buyerId) throw new NotFoundException('Taklif topilmadi');
         if (offer.status !== PriceOfferStatus.PENDING) throw new BadRequestException("Taklifni bekor qilib bo'lmaydi");
         await this.prisma.priceOffer.update({ where: { id: offerId }, data: { status: PriceOfferStatus.CANCELLED, respondedAt: new Date() } });
+        const l = await this.prisma.horseListing.findUnique({ where: { id: offer.listingId }, select: { userId: true, title: true } });
+        if (l) {
+            void this.notifications.deliver({
+                userId: l.userId,
+                category: NotificationCategory.OFFERS,
+                title: `Xaridor taklifini bekor qildi: ${formatMoney(offer.amount, offer.currency)}`,
+                html: `↩️ <b>Xaridor narx taklifini bekor qildi</b>\n\n🐴 ${escN(l.title)}\n💰 ${formatMoney(offer.amount, offer.currency)}`,
+                link: '/offers',
+            });
+        }
         return { success: true };
     }
 

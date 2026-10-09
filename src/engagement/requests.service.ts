@@ -1,3 +1,5 @@
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationCategory } from '@prisma/client';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { HorseGender, HorsePurpose, HorseRequestStatus, ListingStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -33,6 +35,7 @@ export class RequestsService {
     constructor(
         private readonly prisma: PrismaService,
         private readonly notifier: TelegramChannelService,
+        private readonly notifications: NotificationsService,
     ) { }
 
     private serialize<T extends { budgetMax?: Prisma.Decimal | null }>(r: T) {
@@ -192,6 +195,13 @@ export class RequestsService {
                 )
                 .catch(() => { });
         }
+        void this.notifications.deliver({
+            userId: responderId,
+            category: NotificationCategory.OFFERS,
+            title: `Javobingiz yuborildi: ${r.title}`,
+            html: `📤 <b>Javobingiz xaridorga yuborildi</b>\n\n🔎 ${r.title.replace(/</g, '&lt;')}\n\nXaridor sizga o'zi bog'lanadi.`,
+            link: `/requests/${r.id}`,
+        });
         return response;
     }
 

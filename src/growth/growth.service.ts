@@ -2,7 +2,8 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import { InjectBot } from 'nestjs-telegraf';
 import { ConfigService } from '@nestjs/config';
 import { Telegraf } from 'telegraf';
-import { BroadcastStatus, Prisma } from '@prisma/client';
+import { BroadcastStatus, NotificationCategory, Prisma } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 export type Audience = 'ALL' | 'SELLERS' | 'BUYERS' | 'ADMINS';
@@ -40,6 +41,7 @@ export class GrowthService {
         private readonly prisma: PrismaService,
         private readonly config: ConfigService,
         @InjectBot() private readonly bot: Telegraf,
+        private readonly notifications: NotificationsService,
     ) {
         this.miniAppUrl = (this.config.get<string>('MINI_APP_URL') || '').replace(/\/$/, '');
     }
@@ -269,23 +271,25 @@ export class GrowthService {
         if (claimed.count === 0) return;
         await this.prisma.user.update({ where: { id: inviter.id }, data: { listingCredits: { increment: cfg.inviterReward } } });
 
-        const button = this.miniAppUrl ? { reply_markup: { inline_keyboard: [[{ text: '📱 Otbozorni ochish', web_app: { url: `${this.miniAppUrl}/profile` } }]] } } : {};
-        if (inviter.telegramUserId && cfg.inviterReward > 0) {
-            this.bot.telegram
-                .sendMessage(
-                    inviter.telegramUserId.toString(),
-                    `🎁 Siz taklif qilgan <b>${invitee.displayName}</b> birinchi e'lonini joyladi!\nSizga <b>+${cfg.inviterReward}</b> ta bepul e'lon qo'shildi.`,
-                    { parse_mode: 'HTML', ...button },
-                )
-                .catch(() => { });
+        if (cfg.inviterReward > 0) {
+            void this.notifications.deliver({
+                userId: inviter.id,
+                category: NotificationCategory.SYSTEM,
+                title: `Taklif bonusi: +${cfg.inviterReward} ta bepul e'lon`,
+                html: `🎁 Siz taklif qilgan <b>${invitee.displayName}</b> birinchi e'lonini joyladi!\nSizga <b>+${cfg.inviterReward}</b> ta bepul e'lon qo'shildi.`,
+                link: '/profile',
+                buttonText: '📱 Otbozorni ochish',
+            });
         }
-        if (invitee.telegramUserId && cfg.inviteeReward > 0) {
-            this.bot.telegram
-                .sendMessage(invitee.telegramUserId.toString(), `🎁 Taklif bonusi: sizga <b>+${cfg.inviteeReward}</b> ta bepul e'lon qo'shildi!`, {
-                    parse_mode: 'HTML',
-                    ...button,
-                })
-                .catch(() => { });
+        if (cfg.inviteeReward > 0) {
+            void this.notifications.deliver({
+                userId: invitee.id,
+                category: NotificationCategory.SYSTEM,
+                title: `Taklif bonusi: +${cfg.inviteeReward} ta bepul e'lon`,
+                html: `🎁 Taklif bonusi: sizga <b>+${cfg.inviteeReward}</b> ta bepul e'lon qo'shildi!`,
+                link: '/profile',
+                buttonText: '📱 Otbozorni ochish',
+            });
         }
         this.logger.log(`🎁 Referal mukofoti: ${inviter.id} <- ${invitee.id}`);
     }

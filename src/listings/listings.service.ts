@@ -1,3 +1,5 @@
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationCategory } from '@prisma/client';
 import { Injectable, NotFoundException, ForbiddenException, HttpException, HttpStatus } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramChannelService } from '../telegram/telegram-channel.service';
@@ -11,6 +13,7 @@ export class ListingsService {
     constructor(
         private prisma: PrismaService,
         private telegramNotify: TelegramChannelService,
+        private notifications: NotificationsService,
     ) { }
 
     async findAll(filter: ListingsFilterDto) {
@@ -373,6 +376,7 @@ export class ListingsService {
                 userId,
                 userName: editor?.displayName ? `${editor.displayName} (tahrirlangan)` : 'Tahrirlangan e\'lon',
             }).catch(() => { });
+            this.notifyOwnerSubmitted(listing.userId, updated.title, true);
         }
 
         return updated;
@@ -492,8 +496,22 @@ export class ListingsService {
             userId,
             userName: submitter?.displayName,
         }).catch(() => { });
+        this.notifyOwnerSubmitted(listing.userId, listing.title, false);
 
         return this.prisma.horseListing.findUnique({ where: { id } }) as Promise<HorseListing>;
+    }
+
+    /** E'lon egasiga: tekshiruvga yuborildi */
+    private notifyOwnerSubmitted(ownerId: string, title: string, edited: boolean) {
+        void this.notifications.deliver({
+            userId: ownerId,
+            category: NotificationCategory.LISTINGS,
+            title: edited ? `Tahrirlangan e'lon tekshiruvga yuborildi: ${title}` : `E'lon tekshiruvga yuborildi: ${title}`,
+            html:
+                `⏳ <b>${edited ? "O'zgarishlar tekshiruvga yuborildi" : "E'loningiz tekshiruvga yuborildi"}</b>\n\n` +
+                `🐴 ${title.replace(/</g, '&lt;')}\n\nModerator tasdiqlagach bozorda ko'rinadi (odatda 1–3 soat).`,
+            link: '/my-listings',
+        });
     }
 
     async getMyListingById(userId: string, id: string) {

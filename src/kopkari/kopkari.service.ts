@@ -2,7 +2,8 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { InjectBot } from 'nestjs-telegraf';
 import { ConfigService } from '@nestjs/config';
 import { Telegraf } from 'telegraf';
-import { EventStatus, RegistrationStatus } from '@prisma/client';
+import { EventStatus, NotificationCategory, RegistrationStatus } from '@prisma/client';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface RegistrationInput {
@@ -32,6 +33,7 @@ export class KopkariService {
         private readonly prisma: PrismaService,
         private readonly config: ConfigService,
         @InjectBot() private readonly bot: Telegraf,
+        private readonly notifications: NotificationsService,
     ) {
         this.miniAppUrl = (this.config.get<string>('MINI_APP_URL') || '').replace(/\/$/, '');
     }
@@ -79,6 +81,15 @@ export class KopkariService {
                 data: { ...data, status: RegistrationStatus.PENDING, adminNote: null },
             })
             : await this.prisma.eventRegistration.create({ data: { ...data, eventId, userId } });
+
+        void this.notifications.deliver({
+            userId,
+            category: NotificationCategory.KOPKARI,
+            title: `Ko'pkari arizangiz yuborildi: ${event.title}`,
+            html: `📝 <b>Arizangiz yuborildi</b>\n\n🏆 ${esc(event.title)}\n👤 ${esc(data.riderName)}\n\nAdmin ko'rib chiqqach natijani yuboramiz.`,
+            link: `/kopkari/${event.slug}`,
+            buttonText: '📱 Tadbirni ochish',
+        });
 
         // Adminlarga xabar
         const admins = (this.config.get<string>('TELEGRAM_ADMIN_CHAT_IDS') || '').split(',').map((s) => s.trim()).filter(Boolean);
@@ -160,9 +171,14 @@ export class KopkariService {
             const text = approve
                 ? `✅ <b>Arizangiz qabul qilindi!</b>\n\n🏆 ${esc(reg.event.title)}\n📅 ${when}\n\nTadbirda omad tilaymiz! 🏇`
                 : `❌ <b>Arizangiz rad etildi</b>\n\n🏆 ${esc(reg.event.title)}` + (adminNote ? `\n📝 ${esc(adminNote)}` : '');
-            this.bot.telegram
-                .sendMessage(reg.user.telegramUserId.toString(), text, { parse_mode: 'HTML', ...this.button('📱 Tadbirni ochish', `/kopkari/${reg.event.slug}`) })
-                .catch(() => { });
+            void this.notifications.deliver({
+                userId: reg.userId,
+                category: NotificationCategory.KOPKARI,
+                title: approve ? `Ko'pkari arizangiz qabul qilindi: ${reg.event.title}` : `Ko'pkari arizangiz rad etildi: ${reg.event.title}`,
+                html: text,
+                link: `/kopkari/${reg.event.slug}`,
+                buttonText: '📱 Tadbirni ochish',
+            });
         }
         return updated;
     }

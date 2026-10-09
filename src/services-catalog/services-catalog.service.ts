@@ -1,3 +1,5 @@
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationCategory } from '@prisma/client';
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ViewDedupe } from '../common/viewer.util';
 import { Prisma, ServiceCategory, ServiceStatus } from '@prisma/client';
@@ -42,6 +44,7 @@ export class ServicesCatalogService {
     constructor(
         private readonly prisma: PrismaService,
         private readonly notifier: TelegramChannelService,
+        private readonly notifications: NotificationsService,
     ) { }
 
     private serialize<T extends { priceFrom?: Prisma.Decimal | null }>(s: T) {
@@ -163,6 +166,13 @@ export class ServicesCatalogService {
         this.notifier
             .notifyAdminNewService({ id: created.id, title: created.title, category: SERVICE_CATEGORY_LABELS[created.category], userName: user?.displayName })
             .catch(() => { });
+        void this.notifications.deliver({
+            userId,
+            category: NotificationCategory.LISTINGS,
+            title: `Xizmatingiz tekshiruvga yuborildi: ${created.title}`,
+            html: `⏳ <b>Xizmatingiz tekshiruvga yuborildi</b>\n\n🛠 ${created.title.replace(/</g, '&lt;')}\n\nModerator tasdiqlagach katalogda ko'rinadi.`,
+            link: '/my-listings',
+        });
         return this.serialize(created);
     }
 
