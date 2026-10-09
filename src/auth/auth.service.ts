@@ -399,6 +399,12 @@ export class AuthService {
                 const inviter = await this.prisma.user.findUnique({ where: { id: ref }, select: { id: true } });
                 referredById = inviter?.id;
             }
+            // Video/reklama havolasi (ad_<code>) orqali kelgan bo'lsa — manbani yozamiz
+            let campaignId: string | undefined;
+            if (parsed.startParam?.startsWith('ad_')) {
+                const c = await this.prisma.campaign.findUnique({ where: { code: parsed.startParam.slice(3) }, select: { id: true, isActive: true } });
+                if (c?.isActive) campaignId = c.id;
+            }
             user = await this.prisma.user.create({
                 data: {
                     telegramUserId,
@@ -410,6 +416,7 @@ export class AuthService {
                     status: 'ACTIVE',
                     lastLoginAt: new Date(),
                     referredById,
+                    campaignId,
                 },
             });
         } else {

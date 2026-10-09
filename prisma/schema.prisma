@@ -33,6 +33,10 @@ model User {
   notificationPrefs    Json              @default("{}") @map("notification_prefs")
   /// Foydalanuvchi botni bloklagan vaqt (qayta yoqsa null)
   botBlockedAt         DateTime?         @map("bot_blocked_at")
+  /// Qaysi video/reklama havolasi orqali kelgan (birinchi kirish)
+  campaignId           String?           @map("campaign_id")
+  campaign             Campaign?         @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  campaignVisits       CampaignVisit[]
   auditLogs            AuditLog[]
   comments             Comment[]
   favorites            Favorite[]
@@ -1016,3 +1020,32 @@ enum RegistrationStatus {
   REJECTED
   CANCELLED
 }
+
+/// Video yoki reklama uchun alohida havola: t.me/<bot>/app?startapp=ad_<code>
+model Campaign {
+  id         String          @id @default(uuid())
+  code       String          @unique
+  name       String
+  /// Havola ochilganda Mini App'dagi sahifa
+  targetPath String          @default("/") @map("target_path")
+  isActive   Boolean         @default(true) @map("is_active")
+  createdAt  DateTime        @default(now()) @map("created_at")
+  visits     CampaignVisit[]
+  users      User[]
+
+  @@map("campaigns")
+}
+
+model CampaignVisit {
+  id         String   @id @default(uuid())
+  campaignId String   @map("campaign_id")
+  userId     String?  @map("user_id")
+  isNewUser  Boolean  @default(false) @map("is_new_user")
+  createdAt  DateTime @default(now()) @map("created_at")
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([campaignId, createdAt])
+  @@map("campaign_visits")
+}
+
