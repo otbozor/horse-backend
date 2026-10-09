@@ -110,6 +110,20 @@ export class GrowthController {
         return ok(await this.digest.setEnabled(user.id, body?.digestEnabled !== false));
     }
 
+    @Get('admin/digest/settings')
+    @UseGuards(JwtAuthGuard, AdminGuard)
+    @ApiBearerAuth()
+    async digestSettings() {
+        return ok(await this.digest.adminSettings());
+    }
+
+    @Put('admin/digest/settings')
+    @UseGuards(JwtAuthGuard, AdminGuard)
+    @ApiBearerAuth()
+    async setDigestSettings(@Body() body: { enabled?: boolean }) {
+        return ok(await this.digest.setGloballyEnabled(body?.enabled === true));
+    }
+
     @Post('admin/digest/test')
     @UseGuards(JwtAuthGuard, AdminGuard)
     @ApiBearerAuth()
