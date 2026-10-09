@@ -81,9 +81,14 @@ export class TelegramChannelService {
         return currency === 'USD' ? `$${n.toLocaleString('en-US')}` : `${n.toLocaleString('uz-UZ')} so'm`;
     }
 
-    private botAppLink(listingId: string) {
+    /** Mini App'ni Telegram ichida ochadigan havola (kanal tugmalarida web_app ishlamaydi) */
+    private appLink(startParam?: string) {
         const bot = (this.configService.get<string>('TELEGRAM_BOT_USERNAME') || 'otbozor_bot').replace(/^@/, '');
-        return `https://t.me/${bot}/app?startapp=l_${listingId}`;
+        return `https://t.me/${bot}/app${startParam ? `?startapp=${startParam}` : ''}`;
+    }
+
+    private botAppLink(listingId: string) {
+        return this.appLink(`l_${listingId}`);
     }
 
     private footer(channelUrl: string) {
@@ -125,15 +130,15 @@ export class TelegramChannelService {
         return c + this.footer(channelUrl);
     }
 
-    private listingKeyboard(listingId: string, slug: string, state: 'active' | 'sold' | 'closed') {
-        const link = `${this.frontendUrl}/ot/${listingId}-${slug}`;
+    /** Tugmalar Mini App'ni ochadi: faol e'lon — e'lonning o'zi, sotilgan/yopilgan — bozor */
+    private listingKeyboard(listingId: string, _slug: string, state: 'active' | 'sold' | 'closed') {
         if (state !== 'active') {
-            return { inline_keyboard: [[{ text: "Barcha e'lonlar", url: `${this.frontendUrl}/bozor` }, { text: "E'lon joylash", url: `${this.frontendUrl}/elon/yaratish` }]] };
+            return { inline_keyboard: [[{ text: "🐴 Boshqa otlarni ko'rish", url: this.appLink() }]] };
         }
         return {
             inline_keyboard: [
-                [{ text: "To'liq ma'lumot", url: link }, { text: "E'lon joylash", url: `${this.frontendUrl}/elon/yaratish` }],
-                [{ text: "Barcha e'lonlar", url: `${this.frontendUrl}/bozor` }, { text: 'Admin', url: `https://t.me/${this.adminUsername.replace('@', '')}` }],
+                [{ text: "📱 E'lonni ochish", url: this.botAppLink(listingId) }],
+                [{ text: "➕ E'lon joylash", url: this.appLink('create') }],
             ],
         };
     }
