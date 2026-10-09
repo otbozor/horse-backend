@@ -50,6 +50,9 @@ model User {
   eventAttendances     EventAttendance[]
   chatsAsBuyer         ChatThread[]      @relation("ChatBuyer")
   chatsAsSeller        ChatThread[]      @relation("ChatSeller")
+  auctionsAsSeller     Auction[]         @relation("AuctionSeller")
+  auctionsLeading      Auction[]         @relation("AuctionLeader")
+  bids                 Bid[]
 
   @@map("users")
 }
@@ -170,6 +173,7 @@ model HorseListing {
   requestResponses RequestResponse[]
   contacts       ListingContact[]
   chatThreads    ChatThread[]
+  auctions       Auction[]
 
   @@index([userId])
   @@index([regionId])
@@ -797,6 +801,48 @@ model ChatRelay {
 
   @@index([recipientTgId, tgMessageId])
   @@map("chat_relays")
+}
+
+/// Kim oshdi savdosi
+model Auction {
+  id           String        @id @default(uuid())
+  listingId    String        @map("listing_id")
+  sellerId     String        @map("seller_id")
+  currency     Currency      @default(UZS)
+  startPrice   Decimal       @map("start_price") @db.Decimal(15, 2)
+  minStep      Decimal       @map("min_step") @db.Decimal(15, 2)
+  currentPrice Decimal?      @map("current_price") @db.Decimal(15, 2)
+  leaderId     String?       @map("leader_id")
+  status       AuctionStatus @default(ACTIVE)
+  endsAt       DateTime      @map("ends_at")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  listing      HorseListing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  seller       User          @relation("AuctionSeller", fields: [sellerId], references: [id], onDelete: Cascade)
+  leader       User?         @relation("AuctionLeader", fields: [leaderId], references: [id])
+  bids         Bid[]
+
+  @@index([listingId])
+  @@index([status, endsAt])
+  @@map("auctions")
+}
+
+model Bid {
+  id        String   @id @default(uuid())
+  auctionId String   @map("auction_id")
+  userId    String   @map("user_id")
+  amount    Decimal  @db.Decimal(15, 2)
+  createdAt DateTime @default(now()) @map("created_at")
+  auction   Auction  @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([auctionId, createdAt])
+  @@map("bids")
+}
+
+enum AuctionStatus {
+  ACTIVE
+  ENDED
+  CANCELLED
 }
 
 enum ContactType {
