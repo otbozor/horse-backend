@@ -24,6 +24,7 @@ export class AdminFinanceController {
         const keys = [
             'product_listing_price',
             'listing_reactivation_price',
+            'listing_bump_price',
             'listing_oson_start_price', 'listing_oson_start_discount',
             'listing_tezkor_savdo_price', 'listing_tezkor_savdo_discount',
             'listing_turbo_savdo_price', 'listing_turbo_savdo_discount',
@@ -39,6 +40,7 @@ export class AdminFinanceController {
             data: {
                 productListingPrice: Number(map['product_listing_price'] || 35000),
                 reactivationPrice: Number(map['listing_reactivation_price'] || 50000),
+                bumpPrice: Number(map['listing_bump_price'] || 10000),
                 listingPackages: {
                     OSON_START: {
                         price: Number(map['listing_oson_start_price'] || 41600),
@@ -73,6 +75,7 @@ export class AdminFinanceController {
         @Body() body: {
             productListingPrice?: number;
             reactivationPrice?: number;
+            bumpPrice?: number;
             listingPackages?: {
                 OSON_START?: { price?: number; discountPrice?: number | null };
                 TEZKOR_SAVDO?: { price?: number; discountPrice?: number | null };
@@ -99,6 +102,10 @@ export class AdminFinanceController {
 
         if (body.productListingPrice && body.productListingPrice > 0) {
             upserts.push(upsert('product_listing_price', String(body.productListingPrice)));
+        }
+
+        if (body.bumpPrice && body.bumpPrice > 0) {
+            upserts.push(upsert('listing_bump_price', String(body.bumpPrice)));
         }
 
         if (body.reactivationPrice && body.reactivationPrice > 0) {
@@ -190,6 +197,7 @@ export class AdminFinanceController {
                     status: p.status,
                     type: p.listingId ? 'listing' : 'product',
                     packageType: p.packageType,
+                    method: p.method,
                     listingBundleSize: p.listingBundleSize,
                     user: p.user,
                     subject: p.listing || p.product,

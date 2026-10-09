@@ -365,6 +365,22 @@ export class TelegramChannelService {
         }
     }
 
+    async notifyUserPromoted(telegramUserId: string, listing: { id: string; title: string }, packageName: string, days: number): Promise<void> {
+        try {
+            const text =
+                `🚀 <b>E'loningiz reklama qilindi!</b>\n\n` +
+                `🐴 ${this.escapeHtml(listing.title)}\n` +
+                `📦 ${this.escapeHtml(packageName)}${days ? ` — ${days} kun` : ''}\n\n` +
+                `E'loningiz ro'yxat tepasida ko'rsatiladi.`;
+            await this.bot.telegram.sendMessage(telegramUserId, text, {
+                parse_mode: 'HTML',
+                ...this.miniAppButton("📱 E'lonni ochish", `/listings/${listing.id}`),
+            });
+        } catch (error) {
+            this.logger.error(`❌ Failed to notify user (promoted): ${error.message}`);
+        }
+    }
+
     async notifyUserListingResult(
         telegramUserId: string,
         action: 'approved' | 'rejected',

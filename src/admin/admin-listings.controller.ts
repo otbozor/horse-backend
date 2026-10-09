@@ -81,6 +81,26 @@ export class AdminListingsController {
         };
     }
 
+    @Post(':id/promote')
+    @ApiOperation({ summary: "E'lonni qo'lda reklama qilish (naqd to'lov va h.k.)" })
+    async promote(
+        @CurrentUser() user: User,
+        @Param('id') id: string,
+        @Body() body: { type: 'OSON_START' | 'TEZKOR_SAVDO' | 'TURBO_SAVDO' | 'BUMP'; days?: number; amount?: number; note?: string },
+    ): Promise<ApiResponse<any>> {
+        await this.adminService.requireAdmin(user.id);
+        const data = await this.adminService.promoteListing(id, user.id, body);
+        return { success: true, data, message: 'Promoted', timestamp: new Date().toISOString() };
+    }
+
+    @Delete(':id/promote')
+    @ApiOperation({ summary: "Reklamani to'xtatish" })
+    async unpromote(@CurrentUser() user: User, @Param('id') id: string): Promise<ApiResponse<any>> {
+        await this.adminService.requireAdmin(user.id);
+        const data = await this.adminService.unpromoteListing(id, user.id);
+        return { success: true, data, message: 'Unpromoted', timestamp: new Date().toISOString() };
+    }
+
     @Post(':id/approve')
     @ApiOperation({ summary: 'Approve a listing' })
     async approveListing(

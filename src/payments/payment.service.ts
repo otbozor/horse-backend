@@ -57,6 +57,41 @@ export class PaymentService {
         };
     }
 
+    /** "E'lonni yangilash" narxi (admin paneldan o'zgartiriladi) */
+    async getBumpPrice(): Promise<number> {
+        const setting = await this.prisma.appSetting.findUnique({ where: { key: 'listing_bump_price' } });
+        return setting && Number(setting.value) > 0 ? Number(setting.value) : 10000;
+    }
+
+    /** E'lonni ro'yxat tepasiga ko'tarish uchun hisob (faqat faol e'lon) */
+    async createBumpInvoice(userId: string, listingId: string) {
+        const listing = await this.prisma.horseListing.findUnique({ where: { id: listingId } });
+        if (!listing) throw new NotFoundException('Listing not found');
+        if (listing.userId !== userId) throw new BadRequestException('Not your listing');
+        if (listing.status !== ListingStatus.APPROVED) throw new BadRequestException("Faqat faol e'lonni yangilash mumkin");
+
+        const amount = await this.getBumpPrice();
+        const payment = await this.prisma.payment.create({
+            data: {
+                listingId,
+                userId,
+                packageType: PaymentPackage.BUMP,
+                amount,
+                status: PaymentStatus.PENDING,
+                merchantPrepareId: Math.floor(Math.random() * 2000000000) + 1,
+            },
+        });
+        const returnUrl = `${this.frontendUrl}/elon/${listingId}/reklama-natija?paymentId=${payment.id}`;
+        const clickUrl =
+            `https://my.click.uz/services/pay` +
+            `?service_id=${this.serviceId}` +
+            `&merchant_id=${this.merchantId}` +
+            `&amount=${amount}` +
+            `&transaction_param=${payment.id}` +
+            `&return_url=${encodeURIComponent(returnUrl)}`;
+        return { paymentId: payment.id, amount, clickUrl };
+    }
+
     // Get reactivation price from settings
     async getReactivationPrice(): Promise<number> {
         const setting = await this.prisma.appSetting.findUnique({
@@ -443,6 +478,13 @@ export class PaymentService {
                 }),
             ]);
             console.log(`✅ Listing bundle (${bundleSize}) payment completed, listing auto-submitted:`, payment.listingId);
+        } else if (payment.listingId && payment.packageType === PaymentPackage.BUMP) {
+            // E'lonni yangilash: "eng yangi" saralashda ro'yxat tepasiga chiqadi
+            await this.prisma.$transaction([
+                this.prisma.payment.update({ where: { id: payment.id }, data: { status: PaymentStatus.COMPLETED, ...extra } }),
+                this.prisma.horseListing.update({ where: { id: payment.listingId }, data: { publishedAt: new Date() } }),
+            ]);
+            console.log('✅ Listing bumped:', payment.listingId);
         } else if (payment.listingId && payment.packageType) {
             // Boost payment (OSON_START / TEZKOR_SAVDO / TURBO_SAVDO)
             const pkgDefaults = PACKAGE_DEFAULTS[payment.packageType as keyof typeof PACKAGE_DEFAULTS];

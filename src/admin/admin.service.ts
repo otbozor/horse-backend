@@ -3,7 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TelegramChannelService } from '../telegram/telegram-channel.service';
 import { SavedSearchService } from '../engagement/saved-search.service';
 import { GrowthService } from '../growth/growth.service';
-import { ListingStatus, SaleSource, Prisma } from '@prisma/client';
+import { ListingStatus, SaleSource, Prisma, PaymentMethod, PaymentPackage, PaymentStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 // Query parametrlari berilmasa NestJS ularni NaN ga aylantiradi - standart qiymatga qaytaramiz
@@ -239,6 +239,80 @@ export class AdminService {
         }
 
         return listing;
+    }
+
+    /** Qo'lda reklama: Click ishlata olmaydiganlar uchun admin to'lovsiz yoki naqd qabul qilib yoqadi */
+    async promoteListing(
+        listingId: string,
+        adminUserId: string,
+        dto: { type: 'OSON_START' | 'TEZKOR_SAVDO' | 'TURBO_SAVDO' | 'BUMP'; days?: number; amount?: number; note?: string },
+    ) {
+        const DEFAULT_DAYS = { OSON_START: 3, TEZKOR_SAVDO: 7, TURBO_SAVDO: 30 } as const;
+        const NAMES = { OSON_START: 'Oson start', TEZKOR_SAVDO: 'Tezkor savdo', TURBO_SAVDO: 'Turbo savdo', BUMP: "E'lonni yangilash" } as const;
+        if (!(dto.type in NAMES)) throw new BadRequestException("Noto'g'ri reklama turi");
+        const listing = await this.prisma.horseListing.findUnique({
+            where: { id: listingId },
+            include: { user: { select: { telegramUserId: true } } },
+        });
+        if (!listing) throw new NotFoundException('Listing not found');
+        if (listing.status !== ListingStatus.APPROVED) throw new BadRequestException("Faqat faol e'lonni reklama qilish mumkin");
+
+        const now = new Date();
+        const amount = dto.amount && dto.amount > 0 ? Math.round(dto.amount) : 0;
+        let days = 0;
+        const listingData: Prisma.HorseListingUpdateInput = { publishedAt: now };
+        if (dto.type !== 'BUMP') {
+            days = Math.min(Math.max(Math.round(dto.days ?? DEFAULT_DAYS[dto.type]), 1), 365);
+            Object.assign(listingData, {
+                isPaid: true,
+                isTop: true,
+                isPremium: dto.type === 'TURBO_SAVDO',
+                boostExpiresAt: new Date(now.getTime() + days * 86400000),
+            });
+        }
+        const [, updated] = await this.prisma.$transaction([
+            this.prisma.payment.create({
+                data: {
+                    listingId,
+                    userId: listing.userId,
+                    packageType: dto.type as PaymentPackage,
+                    amount,
+                    status: PaymentStatus.COMPLETED,
+                    method: PaymentMethod.MANUAL,
+                },
+            }),
+            this.prisma.horseListing.update({ where: { id: listingId }, data: listingData }),
+        ]);
+        await this.createAuditLog(adminUserId, 'listing.promote', 'HorseListing', listingId, { type: dto.type, days, amount, note: dto.note });
+
+        if (listing.user?.telegramUserId) {
+            this.telegramNotify
+                .notifyUserPromoted(listing.user.telegramUserId.toString(), { id: listing.id, title: listing.title }, NAMES[dto.type], days)
+                .catch(() => { });
+        }
+        if (dto.type !== 'BUMP' && !listing.isTop) {
+            const forChannel = await this.prisma.horseListing.findUnique({
+                where: { id: listingId },
+                include: {
+                    region: { select: { nameUz: true } },
+                    district: { select: { nameUz: true } },
+                    breed: { select: { name: true } },
+                    user: { select: { phone: true } },
+                    media: { where: { type: 'IMAGE' }, orderBy: { sortOrder: 'asc' } },
+                },
+            });
+            if (forChannel) this.telegramNotify.postListingToChannel(forChannel).catch(() => { });
+        }
+        return updated;
+    }
+
+    async unpromoteListing(listingId: string, adminUserId: string) {
+        const updated = await this.prisma.horseListing.update({
+            where: { id: listingId },
+            data: { isTop: false, isPremium: false, boostExpiresAt: null },
+        });
+        await this.createAuditLog(adminUserId, 'listing.unpromote', 'HorseListing', listingId);
+        return updated;
     }
 
     async approveListing(listingId: string, adminUserId: string) {

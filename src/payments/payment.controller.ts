@@ -38,6 +38,21 @@ export class PaymentController {
         return { success: true, data: { amount } };
     }
 
+    @Get('bump-price')
+    @Public()
+    @ApiOperation({ summary: "E'lonni yangilash narxi (public)" })
+    async getBumpPrice() {
+        return { success: true, data: { price: await this.paymentService.getBumpPrice() } };
+    }
+
+    @Post('create-bump-invoice')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: "E'lonni yangilash uchun Click hisobi" })
+    async createBumpInvoice(@Body() body: { listingId: string }, @CurrentUser() user: User) {
+        return { success: true, data: await this.paymentService.createBumpInvoice(user.id, body.listingId) };
+    }
+
     @Post('create-reactivation-invoice')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
