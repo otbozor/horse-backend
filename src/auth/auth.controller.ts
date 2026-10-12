@@ -346,9 +346,9 @@ export class AuthController {
         @Req() req: Request,
         @Res({ passthrough: true }) res: Response,
     ): Promise<AuthResponse<TokenRefreshResponse>> {
-        const refreshToken = req.cookies?.refreshToken;
+        const refreshToken = req.cookies?.refreshToken || (req.body as { refreshToken?: string })?.refreshToken;
         if (!refreshToken) {
-            throw new UnauthorizedException('Refresh token not found in cookies');
+            throw new UnauthorizedException('Refresh token not found');
         }
         const tokens = await this.authService.refreshTokens(refreshToken);
         this.authService.setTokenCookies(res, tokens);
@@ -380,7 +380,7 @@ export class AuthController {
         @Req() req: Request,
         @Res({ passthrough: true }) res: Response,
     ): Promise<AuthResponse<null>> {
-        const refreshToken = req.cookies?.refreshToken;
+        const refreshToken = req.cookies?.refreshToken || (req.body as { refreshToken?: string })?.refreshToken;
         if (refreshToken) {
             await this.authService.logout(refreshToken);
         }

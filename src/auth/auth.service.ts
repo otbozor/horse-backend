@@ -69,7 +69,8 @@ export class AuthService {
             data: {
                 id: sessionId,
                 type: 'SESSION',
-                data: dto.returnUrl || '',
+                // Android ilova sessiyasi: kirish havolasi ilovaga qaytadi
+                data: dto.client === 'app' ? 'app' : dto.returnUrl || '',
                 expiresAt: new Date(Date.now() + 10 * 60 * 1000),
             },
         });
@@ -474,6 +475,17 @@ export class AuthService {
         });
     }
 
+    /** Sayt sessiyasi → otbozor.uz/auth/magic; Android ilova sessiyasi → app.otbozor.uz/app-auth (App Link ilovani ochadi) */
+    private async magicUrl(sessionId: string, token: string): Promise<string> {
+        const s = await this.prisma.telegramAuthSession.findUnique({ where: { id: sessionId }, select: { data: true } });
+        if (s?.data === 'app') {
+            const app = (this.configService.get<string>('MINI_APP_URL') || 'https://app.otbozor.uz').replace(/\/$/, '');
+            return `${app}/app-auth?token=${token}`;
+        }
+        const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://otbozor.uz';
+        return `${frontendUrl}/auth/magic?token=${token}`;
+    }
+
     // Create Magic Link for existing users
     async createMagicLink(dto: TelegramCallbackDto): Promise<{ success: boolean; magicLink?: string; code?: string; error?: string }> {
         try {
@@ -515,8 +527,7 @@ export class AuthService {
                 },
             });
 
-            const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://otbozor.uz';
-            const magicLink = `${frontendUrl}/auth/magic?token=${magicToken}`;
+            const magicLink = await this.magicUrl(dto.sessionId, magicToken);
 
             return { success: true, magicLink };
         } catch (error) {
@@ -579,8 +590,7 @@ export class AuthService {
                 },
             });
 
-            const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://otbozor.uz';
-            const magicLink = `${frontendUrl}/auth/magic?token=${magicToken}`;
+            const magicLink = await this.magicUrl(dto.sessionId, magicToken);
 
             return { success: true, magicLink };
         } catch (error) {

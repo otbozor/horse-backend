@@ -17,6 +17,11 @@ export class TelegramAuthDto {
     @IsOptional()
     @IsString()
     returnUrl?: string;
+
+    @ApiPropertyOptional({ description: "Android ilova uchun: 'app' — kirish havolasi ilovani ochadi", example: 'app' })
+    @IsOptional()
+    @IsString()
+    client?: string;
 }
 
 /**
