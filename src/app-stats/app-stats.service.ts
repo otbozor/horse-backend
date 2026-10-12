@@ -6,8 +6,16 @@ const DAY = 86_400_000;
 const SOURCE_RE = /^[a-z0-9-]{1,24}$/;
 const INSTALL_RE = /^[A-Za-z0-9-]{8,64}$/;
 
-/** UTC kun boshi (AppActiveDay.day uchun) */
-const dayStart = (d = new Date()) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+/** Toshkent vaqti (UTC+5, yozgi vaqt yo'q) — "bugun" yarim tunda almashadi */
+const TZ_OFFSET = 5 * 3_600_000;
+
+/** Toshkent bo'yicha sana (AppActiveDay.day uchun): shu kunning 00:00 UTC ko'rinishi */
+const tashkentDay = (d = new Date()) => {
+    const t = new Date(d.getTime() + TZ_OFFSET);
+    return new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()));
+};
+/** Toshkent kunining boshlanish lahzasi (createdAt kabi vaqtlar bilan solishtirish uchun) */
+const dayStartInstant = (day: Date) => new Date(day.getTime() - TZ_OFFSET);
 
 /**
  * Android ilova statistikasi: yuklab olishlar (APK havolasi backend orqali o'tadi)
@@ -38,8 +46,8 @@ export class AppStatsService {
             update: { version: v, lastSeenAt: new Date(), opens: { increment: 1 }, ...(userId ? { userId } : {}) },
         });
         await this.prisma.appActiveDay.upsert({
-            where: { installId_day: { installId, day: dayStart() } },
-            create: { installId, day: dayStart() },
+            where: { installId_day: { installId, day: tashkentDay() } },
+            create: { installId, day: tashkentDay() },
             update: { opens: { increment: 1 } },
         });
         return { ok: true };
@@ -49,14 +57,16 @@ export class AppStatsService {
     async summary() {
         const now = Date.now();
         const since = (days: number) => new Date(now - days * DAY);
-        const today = dayStart();
+        const today = tashkentDay();
         const from14 = new Date(today.getTime() - 13 * DAY);
+        const todayStart = dayStartInstant(today);
+        const from14Start = dayStartInstant(from14);
 
         const [downloads, dl7, dlToday, uniqueRows, bySource, installs, inst7, active1, active7, active30, loggedIn, versions, dlDaily, instDaily, activeDaily] =
             await Promise.all([
                 this.prisma.appDownload.count(),
                 this.prisma.appDownload.count({ where: { createdAt: { gte: since(7) } } }),
-                this.prisma.appDownload.count({ where: { createdAt: { gte: today } } }),
+                this.prisma.appDownload.count({ where: { createdAt: { gte: todayStart } } }),
                 this.prisma.appDownload.findMany({ distinct: ['visitorKey'], select: { visitorKey: true } }),
                 this.prisma.appDownload.groupBy({ by: ['source'], _count: { _all: true } }),
                 this.prisma.appInstall.count(),
@@ -66,15 +76,15 @@ export class AppStatsService {
                 this.prisma.appActiveDay.findMany({ where: { day: { gte: new Date(today.getTime() - 29 * DAY) } }, distinct: ['installId'], select: { installId: true } }),
                 this.prisma.appInstall.findMany({ where: { userId: { not: null } }, distinct: ['userId'], select: { userId: true } }),
                 this.prisma.appInstall.groupBy({ by: ['version'], _count: { _all: true }, orderBy: { version: 'desc' } }),
-                this.prisma.appDownload.findMany({ where: { createdAt: { gte: from14 } }, select: { createdAt: true } }),
-                this.prisma.appInstall.findMany({ where: { firstSeenAt: { gte: from14 } }, select: { firstSeenAt: true } }),
+                this.prisma.appDownload.findMany({ where: { createdAt: { gte: from14Start } }, select: { createdAt: true } }),
+                this.prisma.appInstall.findMany({ where: { firstSeenAt: { gte: from14Start } }, select: { firstSeenAt: true } }),
                 this.prisma.appActiveDay.groupBy({ by: ['day'], where: { day: { gte: from14 } }, _count: { _all: true }, _sum: { opens: true } }),
             ]);
 
         const bucket = (dates: Date[]) => {
             const arr: number[] = Array(14).fill(0);
             for (const d of dates) {
-                const i = Math.floor((d.getTime() - from14.getTime()) / DAY);
+                const i = Math.floor((d.getTime() - from14Start.getTime()) / DAY);
                 if (i >= 0 && i < 14) arr[i]++;
             }
             return arr;
