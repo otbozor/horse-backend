@@ -37,13 +37,14 @@ export class AppStatsService {
     }
 
     /** Ilova ochildi: o'rnatishni yaratadi/yangilaydi va bugungi faol kunni belgilaydi */
-    async ping(installId: string, version: string, userId?: string) {
+    async ping(installId: string, version: string, userId?: string, webVersion?: string) {
         if (!INSTALL_RE.test(installId)) return { ok: false };
         const v = /^[0-9.]{1,16}$/.test(version) ? version : 'unknown';
+        const web = webVersion && /^w-[0-9a-f]{6,24}$/.test(webVersion) ? webVersion : null;
         await this.prisma.appInstall.upsert({
             where: { installId },
-            create: { installId, version: v, userId: userId ?? null },
-            update: { version: v, lastSeenAt: new Date(), opens: { increment: 1 }, ...(userId ? { userId } : {}) },
+            create: { installId, version: v, webVersion: web, userId: userId ?? null },
+            update: { version: v, lastSeenAt: new Date(), opens: { increment: 1 }, ...(web ? { webVersion: web } : {}), ...(userId ? { userId } : {}) },
         });
         await this.prisma.appActiveDay.upsert({
             where: { installId_day: { installId, day: tashkentDay() } },
@@ -62,7 +63,7 @@ export class AppStatsService {
         const todayStart = dayStartInstant(today);
         const from14Start = dayStartInstant(from14);
 
-        const [downloads, dl7, dlToday, uniqueRows, bySource, installs, inst7, active1, active7, active30, loggedIn, versions, dlDaily, instDaily, activeDaily] =
+        const [downloads, dl7, dlToday, uniqueRows, bySource, installs, inst7, active1, active7, active30, loggedIn, versions, dlDaily, instDaily, activeDaily, webVersions] =
             await Promise.all([
                 this.prisma.appDownload.count(),
                 this.prisma.appDownload.count({ where: { createdAt: { gte: since(7) } } }),
@@ -79,6 +80,13 @@ export class AppStatsService {
                 this.prisma.appDownload.findMany({ where: { createdAt: { gte: from14Start } }, select: { createdAt: true } }),
                 this.prisma.appInstall.findMany({ where: { firstSeenAt: { gte: from14Start } }, select: { firstSeenAt: true } }),
                 this.prisma.appActiveDay.groupBy({ by: ['day'], where: { day: { gte: from14 } }, _count: { _all: true }, _sum: { opens: true } }),
+                // Oxirgi 30 kunda ochilgan telefonlar qaysi veb paketda (OTA)
+                this.prisma.appInstall.groupBy({
+                    by: ['webVersion'],
+                    where: { lastSeenAt: { gte: since(30) } },
+                    _count: { _all: true },
+                    _max: { lastSeenAt: true },
+                }),
             ]);
 
         const bucket = (dates: Date[]) => {
@@ -109,6 +117,9 @@ export class AppStatsService {
             opens: { today: opensArr[13], last7: sum(opensArr.slice(7)), last14: sum(opensArr) },
             loggedInUsers: loggedIn.length,
             versions: versions.map((v) => ({ version: v.version, count: v._count._all })),
+            webVersions: webVersions
+                .map((w) => ({ version: w.webVersion ?? 'eski', count: w._count._all, lastSeenAt: w._max.lastSeenAt }))
+                .sort((a, b) => b.count - a.count),
             daily: {
                 from: from14.toISOString().slice(0, 10),
                 downloads: bucket(dlDaily.map((d) => d.createdAt)),

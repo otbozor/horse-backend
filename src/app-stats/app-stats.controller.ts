@@ -15,6 +15,9 @@ class PingDto {
 
     @IsOptional() @IsString() @MaxLength(16)
     version?: string;
+
+    @IsOptional() @IsString() @MaxLength(32)
+    webVersion?: string;
 }
 
 @ApiTags('App')
@@ -32,7 +35,7 @@ export class AppStatsController {
     /** Ilova ochilganda (ixtiyoriy token — kirgan bo'lsa foydalanuvchiga bog'lanadi) */
     @Post('app/ping')
     async ping(@Body() body: PingDto, @Req() req: Request) {
-        return ok(await this.stats.ping(body.installId, body.version ?? 'unknown', optionalUserId(req)));
+        return ok(await this.stats.ping(body.installId, body.version ?? 'unknown', optionalUserId(req), body.webVersion));
     }
 
     @Get('admin/app-stats')
