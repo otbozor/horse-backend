@@ -37,6 +37,7 @@ model User {
   campaignId           String?           @map("campaign_id")
   campaign             Campaign?         @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   campaignVisits       CampaignVisit[]
+  appInstalls          AppInstall[]
   auditLogs            AuditLog[]
   comments             Comment[]
   favorites            Favorite[]
@@ -1047,5 +1048,49 @@ model CampaignVisit {
 
   @@index([campaignId, createdAt])
   @@map("campaign_visits")
+}
+
+// ---------- Android ilova statistikasi ----------
+
+/// APK yuklab olish (api.otbozor.uz/api/app/download orqali)
+model AppDownload {
+  id        String   @id @default(uuid())
+  /// Qayerdan bosildi: home, page, app-page, header ...
+  source    String?
+  /// Kunlik noyob hisoblash uchun IP+brauzer xeshi (shaxsiy ma'lumot saqlanmaydi)
+  visitorKey String  @map("visitor_key")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("app_downloads")
+}
+
+/// O'rnatilgan ilova nusxasi (birinchi ochilishda yaratiladi)
+model AppInstall {
+  /// Ilova o'zi yaratadigan anonim ID
+  installId   String         @id @map("install_id")
+  platform    String         @default("android")
+  version     String
+  userId      String?        @map("user_id")
+  firstSeenAt DateTime       @default(now()) @map("first_seen_at")
+  lastSeenAt  DateTime       @default(now()) @map("last_seen_at")
+  opens       Int            @default(1)
+  user        User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  activeDays  AppActiveDay[]
+
+  @@index([lastSeenAt])
+  @@index([userId])
+  @@map("app_installs")
+}
+
+/// Ilova qaysi kuni ochilgan (kunlik/haftalik/oylik faollik uchun)
+model AppActiveDay {
+  installId String     @map("install_id")
+  day       DateTime   @db.Date
+  install   AppInstall @relation(fields: [installId], references: [installId], onDelete: Cascade)
+
+  @@id([installId, day])
+  @@index([day])
+  @@map("app_active_days")
 }
 
