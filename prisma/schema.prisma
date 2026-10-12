@@ -1071,6 +1071,8 @@ model AppInstall {
   installId   String         @id @map("install_id")
   platform    String         @default("android")
   version     String
+  /// OTA veb paket versiyasi (w-xxxx)
+  webVersion  String?  @map("web_version")
   userId      String?        @map("user_id")
   firstSeenAt DateTime       @default(now()) @map("first_seen_at")
   lastSeenAt  DateTime       @default(now()) @map("last_seen_at")
