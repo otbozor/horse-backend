@@ -1098,3 +1098,27 @@ model AppActiveDay {
   @@map("app_active_days")
 }
 
+
+/// Server holati — har 5 daqiqada bir snapshot (admin "Server" bo'limi), 30 kun saqlanadi
+model ServerMetric {
+  id           Int      @id @default(autoincrement())
+  createdAt    DateTime @default(now()) @map("created_at")
+  cpu          Float    /// host CPU band, % (5 daqiqa o'rtacha)
+  memUsedMb    Float    @map("mem_used_mb")
+  memTotalMb   Float    @map("mem_total_mb")
+  swapUsedMb   Float    @map("swap_used_mb")
+  load1        Float
+  diskUsedGb   Float    @map("disk_used_gb")
+  diskTotalGb  Float    @map("disk_total_gb")
+  requests     Int      /// 5 daqiqadagi so'rovlar
+  errors5xx    Int      @map("errors_5xx")
+  avgMs        Int      @map("avg_ms")
+  p95Ms        Int      @map("p95_ms")
+  dbSizeMb     Float    @map("db_size_mb")
+  dbConns      Int      @map("db_conns")
+  backendRssMb Float    @map("backend_rss_mb")
+  containers   Json?    /// [{service, memMb, memLimitMb, cpu}]
+
+  @@index([createdAt])
+  @@map("server_metrics")
+}
