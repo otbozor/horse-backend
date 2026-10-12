@@ -1087,6 +1087,8 @@ model AppInstall {
 model AppActiveDay {
   installId String     @map("install_id")
   day       DateTime   @db.Date
+  /// Shu kuni necha marta ochilgan
+  opens     Int        @default(1)
   install   AppInstall @relation(fields: [installId], references: [installId], onDelete: Cascade)
 
   @@id([installId, day])

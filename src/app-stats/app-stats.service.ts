@@ -40,7 +40,7 @@ export class AppStatsService {
         await this.prisma.appActiveDay.upsert({
             where: { installId_day: { installId, day: dayStart() } },
             create: { installId, day: dayStart() },
-            update: {},
+            update: { opens: { increment: 1 } },
         });
         return { ok: true };
     }
@@ -68,7 +68,7 @@ export class AppStatsService {
                 this.prisma.appInstall.groupBy({ by: ['version'], _count: { _all: true }, orderBy: { version: 'desc' } }),
                 this.prisma.appDownload.findMany({ where: { createdAt: { gte: from14 } }, select: { createdAt: true } }),
                 this.prisma.appInstall.findMany({ where: { firstSeenAt: { gte: from14 } }, select: { firstSeenAt: true } }),
-                this.prisma.appActiveDay.groupBy({ by: ['day'], where: { day: { gte: from14 } }, _count: { _all: true } }),
+                this.prisma.appActiveDay.groupBy({ by: ['day'], where: { day: { gte: from14 } }, _count: { _all: true }, _sum: { opens: true } }),
             ]);
 
         const bucket = (dates: Date[]) => {
@@ -80,10 +80,15 @@ export class AppStatsService {
             return arr;
         };
         const activeArr: number[] = Array(14).fill(0);
+        const opensArr: number[] = Array(14).fill(0);
         for (const r of activeDaily) {
             const i = Math.round((new Date(r.day).getTime() - from14.getTime()) / DAY);
-            if (i >= 0 && i < 14) activeArr[i] = r._count._all;
+            if (i >= 0 && i < 14) {
+                activeArr[i] = r._count._all;
+                opensArr[i] = r._sum.opens ?? 0;
+            }
         }
+        const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
 
         return {
             apkUrl: this.apkUrl,
@@ -91,6 +96,7 @@ export class AppStatsService {
             sources: bySource.map((s) => ({ source: s.source ?? 'boshqa', count: s._count._all })).sort((a, b) => b.count - a.count),
             installs: { total: installs, last7: inst7 },
             active: { today: active1, week: active7.length, month: active30.length },
+            opens: { today: opensArr[13], last7: sum(opensArr.slice(7)), last14: sum(opensArr) },
             loggedInUsers: loggedIn.length,
             versions: versions.map((v) => ({ version: v.version, count: v._count._all })),
             daily: {
@@ -98,6 +104,7 @@ export class AppStatsService {
                 downloads: bucket(dlDaily.map((d) => d.createdAt)),
                 installs: bucket(instDaily.map((d) => d.firstSeenAt)),
                 active: activeArr,
+                opens: opensArr,
             },
         };
     }
