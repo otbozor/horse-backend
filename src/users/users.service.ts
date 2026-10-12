@@ -72,8 +72,36 @@ export class UsersService {
         });
     }
 
+    /**
+     * Akkauntni o'chirish (ilova ichidan). E'lonlar, takliflar, to'lovlar tarixi bog'langani uchun
+     * yozuv qattiq o'chirilmaydi: shaxsiy ma'lumotlar tozalanadi, kontent arxivlanadi, kirish bekor qilinadi.
+     * Shu Telegram bilan qayta kirilsa — yangi toza akkaunt ochiladi.
+     */
     async deleteAccount(id: string): Promise<void> {
-        await this.prisma.user.delete({ where: { id } });
+        await this.prisma.$transaction([
+            this.prisma.horseListing.updateMany({ where: { userId: id, status: { in: ['DRAFT', 'PENDING', 'APPROVED', 'REJECTED'] } }, data: { status: 'ARCHIVED' } }),
+            this.prisma.product.updateMany({ where: { userId: id, status: { not: 'ARCHIVED' } }, data: { status: 'ARCHIVED' } }),
+            this.prisma.serviceListing.updateMany({ where: { userId: id, status: { not: 'ARCHIVED' } }, data: { status: 'ARCHIVED' } }),
+            this.prisma.horseRequest.updateMany({ where: { userId: id, status: 'ACTIVE' }, data: { status: 'REMOVED' } }),
+            this.prisma.auction.updateMany({ where: { sellerId: id, status: 'ACTIVE' }, data: { status: 'CANCELLED', cancelReason: "Sotuvchi akkauntini o'chirdi" } }),
+            this.prisma.favorite.deleteMany({ where: { userId: id } }),
+            this.prisma.productFavorite.deleteMany({ where: { userId: id } }),
+            this.prisma.savedSearch.deleteMany({ where: { userId: id } }),
+            this.prisma.notification.deleteMany({ where: { userId: id } }),
+            this.prisma.refreshToken.deleteMany({ where: { userId: id } }),
+            this.prisma.user.update({
+                where: { id },
+                data: {
+                    status: 'DELETED',
+                    displayName: "O'chirilgan foydalanuvchi",
+                    phone: null,
+                    telegramUserId: null,
+                    telegramUsername: null,
+                    avatarUrl: null,
+                    activeChatThreadId: null,
+                },
+            }),
+        ]);
     }
 
     async hasPermission(userId: string, permissionKey: string): Promise<boolean> {

@@ -137,7 +137,7 @@ export class TelegramBotService implements OnApplicationBootstrap {
                             parse_mode: 'Markdown',
                             reply_markup: {
                                 inline_keyboard: [[
-                                    { text: '🚀 Saytga kirish', url: result.magicLink }
+                                    { text: result.magicLink.includes('/app-auth') ? '📱 Ilovaga kirish' : '🚀 Saytga kirish', url: result.magicLink }
                                 ]]
                             }
                         }
@@ -264,7 +264,7 @@ export class TelegramBotService implements OnApplicationBootstrap {
                         parse_mode: 'Markdown',
                         reply_markup: {
                             inline_keyboard: [[
-                                { text: '🚀 Saytga kirish', url: result.magicLink }
+                                { text: result.magicLink.includes('/app-auth') ? '📱 Ilovaga kirish' : '🚀 Saytga kirish', url: result.magicLink }
                             ]],
                             remove_keyboard: true
                         }
