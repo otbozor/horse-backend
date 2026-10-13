@@ -23,6 +23,7 @@ import { GrowthModule } from './growth/growth.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
 import { AppStatsModule } from './app-stats/app-stats.module';
 import { ServerStatsModule } from './server-stats/server-stats.module';
+import { PushModule } from './push/push.module';
 import { InsightsModule } from './insights/insights.module';
 import { ChatModule } from './chat/chat.module';
 import { AuctionsModule } from './auctions/auctions.module';
@@ -86,6 +87,7 @@ import { KopkariModule } from './kopkari/kopkari.module';
         CampaignsModule,
         AppStatsModule,
         ServerStatsModule,
+        PushModule,
         InsightsModule,
         ChatModule,
         AuctionsModule,

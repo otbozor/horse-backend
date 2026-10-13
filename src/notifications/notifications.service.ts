@@ -5,6 +5,7 @@ import { Telegraf } from 'telegraf';
 import type { InlineKeyboardMarkup } from 'telegraf/types';
 import { NotificationCategory, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PushService } from '../push/push.service';
 
 /** Foydalanuvchi o'chira oladigan turlar (SYSTEM — doim yoqilgan) */
 export const OPTIONAL_CATEGORIES: NotificationCategory[] = [
@@ -47,6 +48,7 @@ export class NotificationsService {
         private readonly prisma: PrismaService,
         config: ConfigService,
         @InjectBot() private readonly bot: Telegraf,
+        private readonly push: PushService,
     ) {
         this.miniAppUrl = (config.get<string>('MINI_APP_URL') || '').replace(/\/$/, '');
         this.adminChatIds = (config.get<string>('TELEGRAM_ADMIN_CHAT_IDS') || '').split(',').map((x) => x.trim()).filter(Boolean);
@@ -133,6 +135,8 @@ export class NotificationsService {
 
         const prefs = (user.notificationPrefs ?? {}) as Record<string, boolean>;
         if (input.category !== NotificationCategory.SYSTEM && prefs[input.category] === false) return false;
+        // Android ilova: push-bildirishnoma (o'rnatilgan va ruxsat bergan qurilmalarga)
+        void this.push.sendToUser(user.id, { title, body: body.slice(0, 300) || null, link: input.link ?? null });
         if (!user.telegramUserId) return false;
         return this.send(user.telegramUserId.toString(), input);
     }
