@@ -97,6 +97,22 @@ export class ChatService {
         await this.prisma.user.updateMany({ where: { telegramUserId: BigInt(telegramUserId) }, data: { activeChatThreadId: null } });
     }
 
+    // =================== Boshqa modullar uchun ilgaklar ===================
+
+    /** Chat relay hal qilmagan xabarlar uchun (masalan, botga yozib e'lon joylash) — true qaytarsa xabar band */
+    private readonly messageHooks: ((ctx: Context) => Promise<boolean>)[] = [];
+
+    addMessageHook(fn: (ctx: Context) => Promise<boolean>) {
+        this.messageHooks.push(fn);
+    }
+
+    async runMessageHooks(ctx: Context): Promise<boolean> {
+        for (const hook of this.messageHooks) {
+            if (await hook(ctx).catch(() => false)) return true;
+        }
+        return false;
+    }
+
     // =================== Xabarlarni uzatish ===================
 
     /** Xabar chatga tegishli bo'lsa uzatadi va true qaytaradi; aks holda false (keyingi handlerga) */

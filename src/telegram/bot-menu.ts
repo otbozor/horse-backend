@@ -17,6 +17,7 @@ export const WELCOME_TEXT =
     '🐴 <b>Otbozor — ot savdosi Telegram ichida</b>\n\n' +
     '• Ot, anjom va xizmat e\'lonlarini ko\'ring\n' +
     '• 2 daqiqada e\'lon joylang — moderatordan so\'ng bozorga chiqadi\n' +
+    '• Yoki shu yerga otning rasmlari va qisqa ma\'lumot yuboring — e\'lonni o\'zim tayyorlayman 📸\n' +
     '• Ko\'pkari taqvimi va kim oshdi savdolari\n' +
     '• Sotuvchiga raqamingizni ko\'rsatmasdan shu bot orqali yozing\n\n' +
     'Boshlash uchun pastdagi tugmani bosing 👇';
@@ -26,7 +27,8 @@ export const HELP_TEXT =
     '<b>Qanday ishlaydi?</b>\n' +
     '1. «🐴 Otlarni ko\'rish» tugmasi Otbozor ilovasini ochadi.\n' +
     '2. Yoqqan e\'londa sotuvchiga qo\'ng\'iroq qiling yoki yozing.\n' +
-    '3. O\'z otingizni sotish uchun «➕ E\'lon joylash» ni bosing.\n\n' +
+    '3. O\'z otingizni sotish uchun «➕ E\'lon joylash» ni bosing.\n' +
+    '4. Yoki shu chatga otning rasmlarini va qisqa matn yuboring (zoti, yoshi, viloyati, narxi) — bot e\'lonni o\'zi tayyorlaydi.\n\n' +
     '<b>Buyruqlar</b>\n' +
     '/start — bosh menyu\n' +
     '/elon — e\'lon joylash\n' +
@@ -38,8 +40,9 @@ export const HELP_TEXT =
     'Savol yoki muammo bo\'lsa: @doniyorjon_k';
 
 export const FALLBACK_TEXT =
-    '🤖 Men buyruqlarni tushunaman, oddiy xabarlarni emas.\n\n' +
-    'Ot qidirish yoki e\'lon joylash uchun pastdagi tugmalardan foydalaning. Yordam: /help';
+    '🤖 Bu xabarni tushunmadim.\n\n' +
+    '📸 Ot sotmoqchimisiz? Otning rasmlarini va qisqa ma\'lumot yuboring (zoti, yoshi, viloyati, narxi) — e\'lonni o\'zim tayyorlayman.\n\n' +
+    'Ot qidirish uchun pastdagi tugmalardan foydalaning. Yordam: /help';
 
 /** Bot buyruqlari ro'yxati (Telegram'dagi "Menu" tugmasi) */
 export const BOT_COMMANDS = {

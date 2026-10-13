@@ -87,7 +87,15 @@ export class TelegramBotService implements OnApplicationBootstrap {
 
     @Command('elon')
     async onPost(@Ctx() ctx: Context) {
-        await this.replyOpen(ctx, "➕ <b>E'lon joylash</b>\n\nOt, anjom yoki xizmat — turini tanlang, forma 2 daqiqada to'ldiriladi.", "➕ E'lon joylash", '/create');
+        await this.replyOpen(
+            ctx,
+            "➕ <b>E'lon joylash</b>\n\n" +
+                "<b>1-usul — shu yerda:</b> otning rasmlarini va bir xabarda ma'lumot yuboring (zoti, jinsi, yoshi, rangi, viloyati, narxi). E'lonni o'zim tayyorlab beraman.\n" +
+                "<i>Masalan: Qorabayir ayg'ir, 5 yosh, to'riq. Samarqand, Urgut. Narxi 80 mln.</i>\n\n" +
+                "<b>2-usul — formada:</b> pastdagi tugma (ot, anjom yoki xizmat).",
+            "➕ Formada joylash",
+            '/create',
+        );
     }
 
     @Command('kopkari')
