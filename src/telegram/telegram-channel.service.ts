@@ -85,7 +85,8 @@ export class TelegramChannelService {
     /** Mini App'ni Telegram ichida ochadigan havola (kanal tugmalarida web_app ishlamaydi) */
     private appLink(startParam?: string) {
         const bot = (this.configService.get<string>('TELEGRAM_BOT_USERNAME') || 'otbozor_bot').replace(/^@/, '');
-        return `https://t.me/${bot}/app${startParam ? `?startapp=${startParam}` : ''}`;
+        // Asosiy Mini App (BotFather → Main Mini App): t.me/<bot>?startapp=... to'g'ridan-to'g'ri ochadi
+        return `https://t.me/${bot}?startapp${startParam ? `=${startParam}` : ''}`;
     }
 
     private botAppLink(listingId: string) {

@@ -21,7 +21,7 @@ const slug = (s: string) =>
         .slice(0, 24);
 
 /**
- * Video/reklama havolalari: t.me/<bot>/app?startapp=ad_<code>.
+ * Video/reklama havolalari: t.me/<bot>?startapp=ad_<code>.
  * Kim ochdi, kim yangi ro'yxatdan o'tdi va ulardan kim e'lon joyladi — admin hisobotida.
  */
 @Injectable()

@@ -8,6 +8,8 @@ import { TelegramChannelService } from './telegram-channel.service';
 import { resolvePriceOffer } from '../trust/price-offer-core';
 import { ChatService } from '../chat/chat.service';
 
+const escapeHtml = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
 @Injectable()
 @Update()
 export class TelegramBotService implements OnApplicationBootstrap {
@@ -45,6 +47,42 @@ export class TelegramBotService implements OnApplicationBootstrap {
             parse_mode: 'HTML',
             reply_markup: { inline_keyboard: [[{ text: button, web_app: { url: `${this.miniAppUrl}${path}` } }]] },
         });
+    }
+
+    /** t.me/<bot>?start=l_<id> kabi havolalar: e'lon kartasi + Mini App'da shu sahifani ochish tugmasi */
+    private async openItem(ctx: Context, kind: string, value: string) {
+        const paths: Record<string, string> = { l: '/listings/', e: '/kopkari/', p: '/products/', v: '/services/', r: '/requests/', s: '/sellers/' };
+        const path = `${paths[kind]}${value}`;
+        if (kind === 'l') {
+            const listing = await this.prisma.horseListing
+                .findFirst({
+                    where: { id: value, status: 'APPROVED' },
+                    select: { title: true, priceAmount: true, priceCurrency: true, region: { select: { nameUz: true } }, media: { select: { url: true }, orderBy: { sortOrder: 'asc' }, take: 1 } },
+                })
+                .catch(() => null);
+            if (listing) {
+                const n = Number(listing.priceAmount);
+                const price = listing.priceCurrency === 'USD' ? `$${n.toLocaleString('en-US')}` : `${n.toLocaleString('ru-RU')} so'm`;
+                const caption = `🐴 <b>${escapeHtml(listing.title)}</b>
+💰 ${price}${listing.region ? `
+📍 ${escapeHtml(listing.region.nameUz)}` : ''}`;
+                const reply_markup = { inline_keyboard: [[{ text: "📱 E'lonni ochish", web_app: { url: `${this.miniAppUrl}${path}` } }]] };
+                const photo = listing.media[0]?.url;
+                try {
+                    if (photo) await ctx.replyWithPhoto(photo, { caption, parse_mode: 'HTML', reply_markup });
+                    else await ctx.reply(caption, { parse_mode: 'HTML', reply_markup });
+                    return;
+                } catch {
+                    // rasm yuborilmasa — matn bilan
+                    await ctx.reply(caption, { parse_mode: 'HTML', reply_markup });
+                    return;
+                }
+            }
+            await this.replyOpen(ctx, "Bu e'lon endi faol emas. Boshqa otlarni ko'ring 👇", "🐴 Otlarni ko'rish", '/');
+            return;
+        }
+        const labels: Record<string, string> = { e: "🏇 Ko'pkarini ochish", p: '🛒 Anjomni ochish', v: '🔧 Xizmatni ochish', r: "🔎 So'rovni ochish", s: '👤 Sotuvchini ochish' };
+        await this.replyOpen(ctx, 'Pastdagi tugmani bosing 👇', labels[kind], path);
     }
 
     @Command('elon')
@@ -94,6 +132,13 @@ export class TelegramBotService implements OnApplicationBootstrap {
         // Sotuvchiga bot orqali yozish: t.me/<bot>?start=chat_<listingId>
         if (startPayload?.startsWith('chat_')) {
             await this.chat.openFromDeepLink(ctx, startPayload.slice(5));
+            return;
+        }
+
+        // E'lon/ko'pkari/anjom havolasi bot chatiga tushsa — o'sha sahifani ochadigan karta
+        const item = startPayload ? /^([lepvrs])_([\w-]{1,80})$/.exec(startPayload) : null;
+        if (item) {
+            await this.openItem(ctx, item[1], item[2]);
             return;
         }
 
