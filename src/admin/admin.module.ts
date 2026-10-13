@@ -13,6 +13,7 @@ import { EventsModule } from '../events/events.module';
 import { TelegramModule } from '../telegram/telegram.module';
 import { EngagementModule } from '../engagement/engagement.module';
 import { GrowthModule } from '../growth/growth.module';
+import { AdminHandoverController } from './admin-handover.controller';
 
 @Module({
     imports: [BlogModule, MediaModule, EventsModule, TelegramModule, EngagementModule, GrowthModule],
@@ -23,6 +24,7 @@ import { GrowthModule } from '../growth/growth.module';
         AdminProductsController,
         AdminEventsController,
         AdminFinanceController,
+        AdminHandoverController,
     ],
     providers: [AdminService, AdminProductsService],
     exports: [AdminService],

@@ -12,6 +12,8 @@ model User {
   telegramUserId       BigInt?           @unique @map("telegram_user_id")
   telegramUsername     String?           @map("telegram_username")
   phone                String?
+  /// Admin sotuvchi nomidan e'lon joylaganda: QR/havola orqali Telegram akkauntini ulash kodi (bir martalik)
+  claimCode            String?           @unique @map("claim_code")
   username             String?           @unique
   password             String?
   isAdmin              Boolean           @default(false) @map("is_admin")

@@ -25,6 +25,7 @@ import { AppStatsModule } from './app-stats/app-stats.module';
 import { ServerStatsModule } from './server-stats/server-stats.module';
 import { PushModule } from './push/push.module';
 import { BotListingModule } from './bot-listing/bot-listing.module';
+import { HandoverModule } from './handover/handover.module';
 import { InsightsModule } from './insights/insights.module';
 import { ChatModule } from './chat/chat.module';
 import { AuctionsModule } from './auctions/auctions.module';
@@ -90,6 +91,7 @@ import { KopkariModule } from './kopkari/kopkari.module';
         ServerStatsModule,
         PushModule,
         BotListingModule,
+        HandoverModule,
         InsightsModule,
         ChatModule,
         AuctionsModule,

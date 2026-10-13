@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { TelegramChannelService } from './telegram-channel.service';
 import { resolvePriceOffer } from '../trust/price-offer-core';
 import { ChatService } from '../chat/chat.service';
+import { HandoverService } from '../handover/handover.service';
 
 const escapeHtml = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -20,6 +21,7 @@ export class TelegramBotService implements OnApplicationBootstrap {
         private readonly prisma: PrismaService,
         private readonly channel: TelegramChannelService,
         private readonly chat: ChatService,
+        private readonly handover: HandoverService,
         @InjectBot() private readonly bot: Telegraf,
     ) { }
 
@@ -140,6 +142,32 @@ export class TelegramBotService implements OnApplicationBootstrap {
         // Sotuvchiga bot orqali yozish: t.me/<bot>?start=chat_<listingId>
         if (startPayload?.startsWith('chat_')) {
             await this.chat.openFromDeepLink(ctx, startPayload.slice(5));
+            return;
+        }
+
+        // Admin sotuvchi nomidan joylagan e'lonlar: QR → sotuvchining Telegram'i akkauntga ulanadi
+        if (startPayload?.startsWith('claim_') && ctx.from) {
+            const r = await this.handover.claim(startPayload.slice(6), {
+                id: ctx.from.id,
+                username: ctx.from.username,
+                firstName: ctx.from.first_name,
+                lastName: ctx.from.last_name,
+            });
+            if (!r.ok) {
+                await ctx.reply("⚠️ Bu havola allaqachon ishlatilgan yoki eskirgan. Savol bo'lsa: @doniyorjon_k");
+                return;
+            }
+            await this.replyOpen(
+                ctx,
+                `✅ <b>Xush kelibsiz, ${r.name.replace(/[<>&]/g, '')}!</b>
+
+` +
+                    `${r.listings} ta e'loningiz akkauntingizga ulandi. Endi ularni o'zingiz boshqarasiz: narxni o'zgartirish, «Sotildi» deb belgilash.
+` +
+                    "Xaridorlar bot orqali yozsa — xabarlar shu yerga keladi.",
+                "📋 Mening e'lonlarim",
+                '/my-listings',
+            );
             return;
         }
 
