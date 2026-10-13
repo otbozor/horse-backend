@@ -134,13 +134,23 @@ export function parsePrice(t: string): { amount: number; currency: 'UZS' | 'USD'
     return null;
 }
 
+const OPERATOR = /^(20|33|50|55|61|62|65|66|67|69|71|72|73|74|75|76|77|79|88|90|91|93|94|95|97|98|99)$/;
+const PHONE_RE = /(?<!\d)(\+?998[\s-]?)?\(?(\d{2})\)?[\s-]?(\d{3})[\s-]?(\d{2})[\s-]?(\d{2})(?!\d)/g;
+
+/** Matndagi telefon raqamlari (+998 90 123 45 67, 901234567, (97) 123-45-67) — narx bilan adashtirmaslik uchun */
+function findPhones(text: string): { match: string; phone: string }[] {
+    const out: { match: string; phone: string }[] = [];
+    for (const m of text.matchAll(PHONE_RE)) {
+        const [match, prefix, code, a, b, c] = m;
+        const digits = `${code}${a}${b}${c}`;
+        // 998 bilan — aniq telefon; aks holda operator kodi bo'lsa va "…0000" bilan tugamasa (80000000 kabi narx emas)
+        if (prefix || (OPERATOR.test(code) && !/0000$/.test(digits))) out.push({ match, phone: `+998${digits}` });
+    }
+    return out;
+}
+
 export function parsePhone(raw: string): string | undefined {
-    const m = /(\+?998[\s-]?)?\(?(\d{2})\)?[\s-]?(\d{3})[\s-]?(\d{2})[\s-]?(\d{2})(?!\d)/.exec(raw);
-    if (!m) return undefined;
-    // Narx bilan adashmaslik uchun: 998 bilan boshlansa yoki operator kodi bo'lsa
-    const code = m[2];
-    if (!m[1] && !/^(33|50|55|77|88|90|91|93|94|95|97|98|99|20|61|62|65|66|67|69|71|72|73|74|75|76|79)$/.test(code)) return undefined;
-    return `+998${code}${m[3]}${m[4]}${m[5]}`;
+    return findPhones(raw)[0]?.phone;
 }
 
 export function parseListingText(raw: string, regions: Place[] = [], districts: Place[] = []): ParsedListing {
@@ -162,7 +172,8 @@ export function parseListingText(raw: string, regions: Place[] = [], districts: 
     else if (has(t, 'qulun')) r.ageYears = 0;
     else if (has(t, 'toy')) r.ageYears = 2;
 
-    const price = parsePrice(t);
+    // Telefon raqamlari narx deb olinmasin (masalan, "tel 971234567")
+    const price = parsePrice(findPhones(t).reduce((acc, p) => acc.replace(p.match, ' '), t));
     if (price && price.amount > 0) {
         r.priceAmount = price.amount;
         r.priceCurrency = price.currency;
