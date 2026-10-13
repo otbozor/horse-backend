@@ -14,6 +14,7 @@ import { TelegramModule } from '../telegram/telegram.module';
 import { EngagementModule } from '../engagement/engagement.module';
 import { GrowthModule } from '../growth/growth.module';
 import { AdminHandoverController } from './admin-handover.controller';
+import { AdminListingToolsController } from './admin-listing-tools.controller';
 
 @Module({
     imports: [BlogModule, MediaModule, EventsModule, TelegramModule, EngagementModule, GrowthModule],
@@ -25,6 +26,7 @@ import { AdminHandoverController } from './admin-handover.controller';
         AdminEventsController,
         AdminFinanceController,
         AdminHandoverController,
+        AdminListingToolsController,
     ],
     providers: [AdminService, AdminProductsService],
     exports: [AdminService],
