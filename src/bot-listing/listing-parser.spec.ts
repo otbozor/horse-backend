@@ -45,3 +45,20 @@ describe('yangi zotlar', () => {
         expect(parseListingText('Будённовская кобыла').breedName).toBe('Budyonniy');
     });
 });
+
+describe('telefon narx emas', () => {
+    it("tel 971234567 — narx yo'q, telefon bor", () => {
+        const p = parseListingText("Qorabayir ayg'ir 5 yosh, Samarqand. Tel 971234567");
+        expect(p.priceAmount).toBeUndefined();
+        expect(p.phone).toBe('+998971234567');
+    });
+    it('+998 va narx birga', () => {
+        const p = parseListingText('Arab biya 40 mln +998901234567');
+        expect(p).toMatchObject({ priceAmount: 40_000_000, phone: '+998901234567' });
+    });
+    it('9 xonali narx (telefon emas)', () => {
+        expect(parseListingText('Narxi 120000000').priceAmount).toBe(120_000_000);
+        expect(parseListingText('Narxi 900000000 som').priceAmount).toBe(900_000_000);
+        expect(parseListingText('80 000 000 tel 93 123 45 67')).toMatchObject({ priceAmount: 80_000_000, phone: '+998931234567' });
+    });
+});
