@@ -89,6 +89,7 @@ export class UsersService {
             this.prisma.savedSearch.deleteMany({ where: { userId: id } }),
             this.prisma.notification.deleteMany({ where: { userId: id } }),
             this.prisma.refreshToken.deleteMany({ where: { userId: id } }),
+            this.prisma.pushDevice.deleteMany({ where: { userId: id } }),
             this.prisma.user.update({
                 where: { id },
                 data: {

@@ -39,6 +39,7 @@ model User {
   campaign             Campaign?         @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   campaignVisits       CampaignVisit[]
   appInstalls          AppInstall[]
+  pushDevices          PushDevice[]
   auditLogs            AuditLog[]
   comments             Comment[]
   favorites            Favorite[]
@@ -1122,4 +1123,17 @@ model ServerMetric {
 
   @@index([createdAt])
   @@map("server_metrics")
+}
+
+/// Android ilova push-bildirishnomalari (Firebase Cloud Messaging) uchun qurilma tokenlari
+model PushDevice {
+  token      String   @id
+  userId     String   @map("user_id")
+  platform   String   @default("android")
+  createdAt  DateTime @default(now()) @map("created_at")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_devices")
 }
