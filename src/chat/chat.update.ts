@@ -12,6 +12,8 @@ export class ChatUpdate {
     async onMessage(@Ctx() ctx: Context, @Next() next: () => Promise<void>) {
         const handled = await this.chat.relay(ctx).catch(() => false);
         if (handled) return;
+        // Botga rasm + matn yozib e'lon joylash va boshqa ilgaklar
+        if (await this.chat.runMessageHooks(ctx)) return;
         // Hech kimga tegishli bo'lmagan oddiy matn — jim qolmasdan menyu ko'rsatamiz
         const msg = ctx.message;
         if (ctx.chat?.type === 'private' && msg && 'text' in msg && !msg.text.startsWith('/')) {
