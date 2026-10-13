@@ -7,7 +7,7 @@ const P = (t: string) => parseListingText(t, regions, districts);
 describe('listing parser', () => {
     it('lotin, mln', () => {
         const p = P("Qorabayir ayg'ir sotiladi, 5 yosh, to'riq, ko'pkariga tayyor. Samarqand Urgut. Narxi 80 mln. Tel: 90 123 45 67");
-        expect(p).toMatchObject({ breedName: 'Karabayir', gender: 'AYGIR', ageYears: 5, color: "To'riq", purpose: 'KOPKARI', priceAmount: 80_000_000, priceCurrency: 'UZS', regionId: 'r2', districtId: 'd1', phone: '+998901234567' });
+        expect(p).toMatchObject({ breedName: 'Qorabayir', gender: 'AYGIR', ageYears: 5, color: "To'riq", purpose: 'KOPKARI', priceAmount: 80_000_000, priceCurrency: 'UZS', regionId: 'r2', districtId: 'd1', phone: '+998901234567' });
         expect(buildTitle(p)).toBe("Qorabayir ayg'ir, 5 yosh");
     });
     it('kirill, dollar', () => {
@@ -34,5 +34,14 @@ describe('listing parser', () => {
     });
     it('oddiy salom e\'longa o\'xshamaydi', () => {
         expect(P('Assalomu alaykum, qalaysiz?').score).toBeLessThan(2);
+    });
+});
+
+describe('yangi zotlar', () => {
+    it('budyonniy, qirgiz, poni', () => {
+        expect(parseListingText('Budyonniy ayg\'ir 6 yosh 90 mln').breedName).toBe('Budyonniy');
+        expect(parseListingText("Qirg'iz biya, 3 yosh").breedName).toBe("Qirg'iz");
+        expect(parseListingText('Poni sotiladi bolalar uchun 15 mln').breedName).toBe('Poni');
+        expect(parseListingText('Будённовская кобыла').breedName).toBe('Budyonniy');
     });
 });

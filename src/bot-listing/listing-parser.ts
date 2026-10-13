@@ -46,14 +46,27 @@ export function normalize(text: string): string {
 /** So'z chegarasi bilan qidirish (apostrof so'zning bir qismi) */
 const has = (text: string, word: string) => new RegExp(`(^|[^a-z'])${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i').test(text);
 
+/** Kalit — bazadagi breeds.name bilan aynan bir xil */
 const BREEDS: [string, string[]][] = [
-    ['Karabayir', ['qorabayir', 'qorabayr', 'qorabair', 'karabayir', 'karabair', 'qora bayir']],
+    ['Qorabayir', ['qorabayir', 'qorabayr', 'qorabair', 'karabayir', 'karabair', 'qora bayir']],
     ['Axaltekin', ['axaltekin', 'ahaltekin', 'axalteke', 'ahalteke', 'axal-teke', 'ahal-teke', 'akhal']],
+    ['Budyonniy', ['budyonniy', 'budyonn', 'budyon', 'budenn', 'budyonovsk']],
+    ["Rus yo'rtog'i", ["rus yo'rtog", 'russkiy rysak', 'russk rysak']],
+    ['Orlov', ['orlov']],
+    ['Tersk', ['tersk']],
+    ['Trakenen', ['trakenen', 'trakehner']],
+    ['Ganover', ['ganover', 'hannover', 'ganovers']],
+    ['Don', ['don zot', 'donskoy', 'donskaya', 'don oti']],
+    ['Qozoq (jabe)', ['qozoq zot', 'qozoq oti', 'kazaxsk', 'jabe', 'jabi']],
+    ["Qirg'iz", ["qirg'iz", 'qirgiz', 'kirgiz', 'kyrgyz', 'novokirgiz']],
+    ["Og'ir yuk tashuvchi", ['tyajelovoz', "og'ir yuk", 'vladimir', 'bityug']],
+    ['Friz', ['friz', 'friesian']],
+    ['Andalus', ['andalus', 'andaluz', 'andaluc']],
+    ['Poni', ['poni', 'pony']],
     ['Arab', ['arab']],
     ['Loqay', ['loqay', 'lokay', 'lokai']],
     ['Yomud', ['yomud', 'iomud', 'yomut']],
     ['Ingliz', ['ingliz', 'angliy', 'chistokrov', 'thoroughbred']],
-    ['Orlov', ['orlov']],
     ['Aralash', ['aralash', 'metis', 'duragay', 'gibrid']],
 ];
 
@@ -179,7 +192,8 @@ export function parseListingText(raw: string, regions: Place[] = [], districts: 
 }
 
 const GENDER_WORD: Record<Gender, string> = { AYGIR: "ayg'ir", BIYA: 'biya', AXTA: 'axta' };
-const BREED_UZ: Record<string, string> = { Karabayir: 'Qorabayir', Axaltekin: 'Axaltekin', Arab: 'Arab', Loqay: 'Loqay', Yomud: 'Yomud', Ingliz: 'Ingliz', Orlov: 'Orlov', Aralash: 'Aralash zot' };
+/** Sarlavhadagi ko'rinishi (qolganlari — zot nomining o'zi) */
+const BREED_UZ: Record<string, string> = { Aralash: 'Aralash zot', 'Qozoq (jabe)': 'Qozoq', "Og'ir yuk tashuvchi": "Og'ir zot" };
 
 /** "Qorabayir ayg'ir, 5 yosh" */
 export function buildTitle(p: ParsedListing): string {

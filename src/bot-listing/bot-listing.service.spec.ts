@@ -15,11 +15,11 @@ function setup() {
         },
         region: { findMany: jest.fn(async () => [{ id: 'r-sam', nameUz: 'Samarqand' }, { id: 'r-qash', nameUz: 'Qashqadaryo' }]) },
         district: { findMany: jest.fn(async () => [{ id: 'd-urgut', nameUz: 'Urgut tumani', regionId: 'r-sam' }]) },
-        breed: { findMany: jest.fn(async () => [{ id: 'b-qb', name: 'Karabayir' }]) },
+        breed: { findMany: jest.fn(async () => [{ id: 'b-qb', name: 'Qorabayir' }]) },
         horseListing: {
             findUnique: jest.fn(async ({ where }: any) => {
                 const l = listings.get(where.id);
-                return l && { ...l, region: l.regionId ? { nameUz: 'Samarqand' } : null, district: null, breed: l.breedId ? { name: 'Karabayir' } : null, media: l.media ?? [] };
+                return l && { ...l, region: l.regionId ? { nameUz: 'Samarqand' } : null, district: null, breed: l.breedId ? { name: 'Qorabayir' } : null, media: l.media ?? [] };
             }),
             update: jest.fn(async ({ where, data }: any) => {
                 const l = listings.get(where.id);
