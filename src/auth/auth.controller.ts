@@ -72,6 +72,8 @@ interface UserMeResponse {
     isAdmin: boolean;
     listingCredits: number;
     hasUnlimitedListings: boolean;
+    /** Ro'yxatdan o'tgan vaqt — mini app yangi foydalanuvchiga tanishtiruv ko'rsatishi uchun */
+    createdAt?: string;
 }
 
 @ApiTags('Autentifikatsiya')
@@ -273,6 +275,7 @@ export class AuthController {
                     isAdmin: user.isAdmin,
                     listingCredits: user.listingCredits,
                     hasUnlimitedListings: user.hasUnlimitedListings,
+                    createdAt: user.createdAt.toISOString(),
                 },
                 tokens: {
                     accessToken: tokens.accessToken,
