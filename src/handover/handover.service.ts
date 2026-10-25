@@ -53,7 +53,7 @@ export class HandoverService {
         });
         if (existing) return existing;
         return this.prisma.user.create({
-            data: { displayName, phone, status: 'ACTIVE', isVerified: false },
+            data: { displayName, phone, status: 'ACTIVE', isVerified: false, signupSource: 'ADMIN' },
         });
     }
 

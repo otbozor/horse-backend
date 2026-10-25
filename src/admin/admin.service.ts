@@ -458,6 +458,33 @@ export class AdminService {
     }
 
     // Users management
+    /** Yangi foydalanuvchilar kunlar (Toshkent vaqti) va manba bo'yicha */
+    async getSignupStats(days = 30) {
+        days = Math.min(Math.max(Math.trunc(Number(days)) || 30, 1), 365);
+        const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+        const rows = await this.prisma.$queryRaw<{ day: string; source: string | null; n: bigint }[]>`
+            SELECT to_char((created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Tashkent', 'YYYY-MM-DD') AS day,
+                   signup_source::text AS source, count(*) AS n
+            FROM users
+            WHERE created_at >= ${since}
+            GROUP BY 1, 2
+            ORDER BY 1 DESC`;
+        const byDay = new Map<string, { date: string; total: number; sources: Record<string, number> }>();
+        const totals: Record<string, number> = {};
+        let total = 0;
+        for (const r of rows) {
+            const n = Number(r.n);
+            const key = r.source ?? 'UNKNOWN';
+            const d = byDay.get(r.day) ?? { date: r.day, total: 0, sources: {} };
+            d.total += n;
+            d.sources[key] = (d.sources[key] ?? 0) + n;
+            byDay.set(r.day, d);
+            totals[key] = (totals[key] ?? 0) + n;
+            total += n;
+        }
+        return { days, total, totals, byDay: [...byDay.values()] };
+    }
+
     async getUsers(page = 1, limit = 20, status?: string, q?: string, blocked?: boolean) {
         page = toPage(page, 1, 100000);
         limit = toPage(limit, 20);
@@ -500,6 +527,9 @@ export class AdminService {
                     updatedAt: true,
                     lastLoginAt: true,
                     botBlockedAt: true,
+                    signupSource: true,
+                    signupSourceEstimated: true,
+                    campaign: { select: { name: true } },
                     _count: { select: { listings: true } },
                 },
             }),

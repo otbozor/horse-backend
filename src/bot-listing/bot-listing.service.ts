@@ -324,6 +324,7 @@ export class BotListingService implements OnModuleInit {
                     isVerified: true,
                     status: 'ACTIVE',
                     lastLoginAt: new Date(),
+                    signupSource: 'BOT',
                 },
                 select: { id: true, status: true },
             });

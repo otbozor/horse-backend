@@ -7,6 +7,14 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum SignupSource {
+  MINIAPP
+  BOT
+  SITE
+  ANDROID
+  ADMIN
+}
+
 model User {
   id                   String            @id @default(uuid())
   telegramUserId       BigInt?           @unique @map("telegram_user_id")
@@ -38,6 +46,10 @@ model User {
   botBlockedAt         DateTime?         @map("bot_blocked_at")
   /// Qaysi video/reklama havolasi orqali kelgan (birinchi kirish)
   campaignId           String?           @map("campaign_id")
+  /// Qayerdan ro'yxatdan o'tgan (mini app, bot, sayt, Android ilova, admin)
+  signupSource         SignupSource?     @map("signup_source")
+  /// Manba eski foydalanuvchi uchun taxminan aniqlangan (yozib qo'yilmagan)
+  signupSourceEstimated Boolean          @default(false) @map("signup_source_estimated")
   campaign             Campaign?         @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   campaignVisits       CampaignVisit[]
   appInstalls          AppInstall[]
