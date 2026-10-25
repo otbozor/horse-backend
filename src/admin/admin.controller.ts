@@ -46,6 +46,14 @@ export class AdminController {
         };
     }
 
+    @Get('users/signup-stats')
+    @ApiOperation({ summary: "Yangi foydalanuvchilar: kunlar va manba (mini app, bot, sayt, Android, admin) bo'yicha" })
+    async getSignupStats(@CurrentUser() user: User, @Query('days') days?: number): Promise<ApiResponse<any>> {
+        await this.adminService.requireAdmin(user.id);
+        const data = await this.adminService.getSignupStats(days);
+        return { success: true, data, message: 'Signup stats', timestamp: new Date().toISOString() };
+    }
+
     @Get('users')
     @ApiOperation({ summary: 'Get all users' })
     async getUsers(

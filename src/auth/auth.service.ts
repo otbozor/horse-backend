@@ -142,6 +142,7 @@ export class AuthService {
                         phone: dto.phone,
                         isVerified: true,
                         status: 'ACTIVE',
+                        signupSource: session.data === 'app' ? 'ANDROID' : 'SITE',
                     },
                 });
             } else {
@@ -418,6 +419,7 @@ export class AuthService {
                     lastLoginAt: new Date(),
                     referredById,
                     campaignId,
+                    signupSource: 'MINIAPP',
                 },
             });
         } else {
@@ -560,6 +562,9 @@ export class AuthService {
                 return { success: false, error: 'This phone number is already registered' };
             }
 
+            // Kirish qayerdan boshlangan: Android ilova sessiyasi yoki sayt
+            const loginSession = await this.prisma.telegramAuthSession.findUnique({ where: { id: dto.sessionId }, select: { data: true } });
+
             // Create new user
             const user = await this.prisma.user.create({
                 data: {
@@ -569,6 +574,7 @@ export class AuthService {
                     phone: dto.phone,
                     isVerified: true,
                     status: 'ACTIVE',
+                    signupSource: loginSession?.data === 'app' ? 'ANDROID' : 'SITE',
                 },
             });
 
