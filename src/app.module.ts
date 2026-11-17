@@ -31,6 +31,7 @@ import { ChatModule } from './chat/chat.module';
 import { AuctionsModule } from './auctions/auctions.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { KopkariModule } from './kopkari/kopkari.module';
+import { GameModule } from './game/game.module';
 
 @Module({
     imports: [
@@ -99,6 +100,9 @@ import { KopkariModule } from './kopkari/kopkari.module';
 
         // Ko'pkari: ishtirokchilar va natijalar
         KopkariModule,
+
+        // "Otbozor Poyga" o'yini (@otbozor_game) reytingi
+        GameModule,
     ],
 })
 export class AppModule { }
