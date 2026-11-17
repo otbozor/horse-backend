@@ -1151,3 +1151,19 @@ model PushDevice {
   @@index([userId])
   @@map("push_devices")
 }
+
+/// "Otbozor Poyga" o'yini (@otbozor_game Mini App) reytingi: har bir o'yinchining hafta/oy bo'yicha eng yaxshi natijasi
+model GameScore {
+  id             String   @id @default(uuid())
+  kind           String   /// race | kopkari
+  period         String   /// week:2026-W47 | month:2026-11
+  telegramUserId BigInt   @map("telegram_user_id")
+  name           String
+  value          Float    /// race: soniya (kam yaxshi), kopkari: halol soni (ko'p yaxshi)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@unique([kind, period, telegramUserId])
+  @@index([kind, period, value])
+  @@map("game_scores")
+}
